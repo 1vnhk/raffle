@@ -17,21 +17,23 @@ contract RaffleTest is Test {
         vm.deal(PLAYER, STARTING_PLAYER_BALANCE);
     }
 
-    function testEnterRevertsWhenPlayerPaysLessThanEntranceFee() public {
+    modifier player() {
         vm.prank(PLAYER);
+        _;
+    }
+
+    function testEnterRevertsWhenPlayerPaysLessThanEntranceFee() public player {
         vm.expectRevert(Raffle.Raffle__SendMoreToEnterRaffle.selector);
         raffle.enter{value: ENTRANCE_FEE - 1}();
     }
 
-    function testEnterAddsPlayerToPlayersArray() public {
-        vm.prank(PLAYER);
+    function testEnterAddsPlayerToPlayersArray() public player {
         raffle.enter{value: ENTRANCE_FEE}();
 
         assertEq(raffle.getPlayer(0), PLAYER);
     }
 
-    function testEnterEmitsEvent() public {
-        vm.prank(PLAYER);
+    function testEnterEmitsEvent() public player {
         vm.expectEmit(true, false, false, false, address(raffle));
         emit Raffle.Raffle__Entered(PLAYER);
         raffle.enter{value: ENTRANCE_FEE}();
