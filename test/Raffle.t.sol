@@ -10,20 +10,30 @@ contract RaffleTest is Test {
     uint256 constant ENTRANCE_FEE = 100 gwei;
     uint256 constant STARTING_PLAYER_BALANCE = 1 ether;
     address PLAYER = makeAddr("player");
+    uint256 constant INTERVAL = 1 days;
 
     function setUp() public {
-        raffle = new Raffle(ENTRANCE_FEE);
+        raffle = new Raffle(ENTRANCE_FEE, INTERVAL);
 
         vm.deal(PLAYER, STARTING_PLAYER_BALANCE);
     }
 
     function testRaffleRevertsWhenFeeIsZero() public {
         vm.expectRevert(Raffle.Raffle__FeeIsTooLow.selector);
-        new Raffle(0);
+        new Raffle(0, INTERVAL);
+    }
+
+    function testRaffleRevertsWhenIntervalIsZero() public {
+        vm.expectRevert(Raffle.Raffle__IntervalIsTooLow.selector);
+        new Raffle(ENTRANCE_FEE, 0);
     }
 
     function testRaffleIsInitializedWithCorrectEntranceFee() public view {
         assertEq(raffle.getEntranceFee(), ENTRANCE_FEE);
+    }
+
+    function testRaffleIsInitializedWithCorrectInterval() public view {
+        assertEq(raffle.getInterval(), INTERVAL);
     }
 
     modifier player() {
