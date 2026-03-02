@@ -11,6 +11,8 @@ contract Raffle {
     uint256 private immutable i_entranceFee;
     address payable[] private s_players;
 
+    event Raffle__Entered(address indexed player);
+
     constructor(uint256 fee) {
         i_entranceFee = fee;
     }
@@ -19,6 +21,8 @@ contract Raffle {
         require(msg.value >= i_entranceFee, Raffle__SendMoreToEnterRaffle());
 
         s_players.push(payable(msg.sender));
+
+        emit Raffle__Entered(msg.sender);
     }
 
     function pickWinner() public {}
