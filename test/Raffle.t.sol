@@ -47,4 +47,13 @@ contract RaffleTest is Test {
         emit Raffle.Entered(PLAYER);
         raffle.enter{value: ENTRANCE_FEE}();
     }
+
+    function testEnterIncreasesContractBalance() public player {
+        uint256 raffleStartingBalance = address(raffle).balance;
+        uint256 playerStartingBalance = PLAYER.balance;
+        raffle.enter{value: ENTRANCE_FEE}();
+        
+        assertEq(address(raffle).balance, raffleStartingBalance + ENTRANCE_FEE);
+        assertEq(PLAYER.balance, playerStartingBalance - ENTRANCE_FEE);
+    }
 }
