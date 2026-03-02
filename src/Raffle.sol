@@ -9,10 +9,13 @@ contract Raffle {
     error Raffle__SendMoreToEnterRaffle();
     error Raffle__FeeIsTooLow();
     error Raffle__IntervalIsTooLow();
+    error Raffle__IntervalHasNotPassed();
 
     uint256 private immutable i_entranceFee;
+    /// @dev The duration of the raffle in seconds
     uint256 private immutable i_interval;
     address payable[] private s_players;
+    uint256 private s_lastTimestamp;
 
     event Entered(address indexed player);
 
@@ -22,6 +25,7 @@ contract Raffle {
 
         i_entranceFee = fee;
         i_interval = interval;
+        s_lastTimestamp = block.timestamp;
     }
 
     function enter() external payable {
@@ -35,7 +39,11 @@ contract Raffle {
     // How to get a random number?
     // Use random number to pick a winner
     // Should be called automatically: when?
-    function pickWinner() external {}
+    function pickWinner() external {
+        require(block.timestamp - s_lastTimestamp >= i_interval, Raffle__IntervalHasNotPassed());
+
+        s_lastTimestamp = block.timestamp;
+    }
 
     /**
      * Getter functions
@@ -50,5 +58,9 @@ contract Raffle {
 
     function getPlayer(uint256 index) external view returns (address) {
         return s_players[index];
+    }
+
+    function getLastTimestamp() external view returns (uint256) {
+        return s_lastTimestamp;
     }
 }

@@ -36,6 +36,10 @@ contract RaffleTest is Test {
         assertEq(raffle.getInterval(), INTERVAL);
     }
 
+    function testRaffleIsInitializedWithCorrectLastTimestamp() public view {
+        assertEq(raffle.getLastTimestamp(), block.timestamp);
+    }
+
     modifier player() {
         vm.prank(PLAYER);
         _;
@@ -75,5 +79,20 @@ contract RaffleTest is Test {
 
         assertEq(address(raffle).balance, raffleStartingBalance + ENTRANCE_FEE + extraFee);
         assertEq(PLAYER.balance, playerStartingBalance - ENTRANCE_FEE - extraFee);
+    }
+
+    function testPickWinnerRevertsWhenIntervalHasNotPassed() public {
+        vm.warp(block.timestamp + INTERVAL - 1);
+        vm.expectRevert(Raffle.Raffle__IntervalHasNotPassed.selector);
+        raffle.pickWinner();
+    }
+
+    function testPickWinnerUpdatesLastTimestamp() public {
+        uint256 lastTimestamp = raffle.getLastTimestamp();
+        
+        vm.warp(block.timestamp + INTERVAL);
+        raffle.pickWinner();
+        
+        assertEq(raffle.getLastTimestamp(), lastTimestamp + INTERVAL);
     }
 }
