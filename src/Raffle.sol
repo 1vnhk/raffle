@@ -7,6 +7,7 @@ pragma solidity ^0.8.33;
 /// @dev Implements Chainlink VRFv2.5
 contract Raffle {
     error Raffle__SendMoreToEnterRaffle();
+    error Raffle__FeeIsTooLow();
 
     uint256 private immutable i_entranceFee;
     address payable[] private s_players;
@@ -14,6 +15,8 @@ contract Raffle {
     event Entered(address indexed player);
 
     constructor(uint256 fee) {
+        require(fee > 0, Raffle__FeeIsTooLow());
+
         i_entranceFee = fee;
     }
 

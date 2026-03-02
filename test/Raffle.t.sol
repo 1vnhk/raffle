@@ -17,6 +17,15 @@ contract RaffleTest is Test {
         vm.deal(PLAYER, STARTING_PLAYER_BALANCE);
     }
 
+    function testRaffleRevertsWhenFeeIsZero() public {
+        vm.expectRevert(Raffle.Raffle__FeeIsTooLow.selector);
+        new Raffle(0);
+    }
+
+    function testRaffleIsInitializedWithCorrectEntranceFee() public view {
+        assertEq(raffle.getEntranceFee(), ENTRANCE_FEE);
+    }
+
     modifier player() {
         vm.prank(PLAYER);
         _;
