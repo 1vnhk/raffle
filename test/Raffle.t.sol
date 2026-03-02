@@ -52,8 +52,18 @@ contract RaffleTest is Test {
         uint256 raffleStartingBalance = address(raffle).balance;
         uint256 playerStartingBalance = PLAYER.balance;
         raffle.enter{value: ENTRANCE_FEE}();
-        
+
         assertEq(address(raffle).balance, raffleStartingBalance + ENTRANCE_FEE);
         assertEq(PLAYER.balance, playerStartingBalance - ENTRANCE_FEE);
+    }
+
+    function testEnterKeepsSentFeeEvenIfItsMoreThanEntranceFee() public player {
+        uint256 raffleStartingBalance = address(raffle).balance;
+        uint256 playerStartingBalance = PLAYER.balance;
+        uint256 extraFee = 100 gwei;
+        raffle.enter{value: ENTRANCE_FEE + extraFee}();
+
+        assertEq(address(raffle).balance, raffleStartingBalance + ENTRANCE_FEE + extraFee);
+        assertEq(PLAYER.balance, playerStartingBalance - ENTRANCE_FEE - extraFee);
     }
 }
