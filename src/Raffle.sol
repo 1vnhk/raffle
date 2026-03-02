@@ -20,7 +20,7 @@ contract Raffle {
         i_entranceFee = fee;
     }
 
-    function enter() public payable {
+    function enter() external payable {
         require(msg.value >= i_entranceFee, Raffle__SendMoreToEnterRaffle());
 
         s_players.push(payable(msg.sender));
@@ -28,7 +28,7 @@ contract Raffle {
         emit Entered(msg.sender);
     }
 
-    function pickWinner() public {}
+    function pickWinner() external {}
 
     /**
      * Getter functions
