@@ -35,7 +35,7 @@ contract RaffleTest is Test {
 
     function testEnterEmitsEvent() public player {
         vm.expectEmit(true, false, false, false, address(raffle));
-        emit Raffle.Raffle__Entered(PLAYER);
+        emit Raffle.Entered(PLAYER);
         raffle.enter{value: ENTRANCE_FEE}();
     }
 }
