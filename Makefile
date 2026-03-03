@@ -1,6 +1,6 @@
 -include .env
 
-.PHONY: build format test coverage fmt
+.PHONY: build format test coverage setup
 
 build:
 	@forge build
@@ -15,3 +15,7 @@ coverage:
 	@forge coverage --report lcov
 	genhtml lcov.info -o coverage --branch-coverage
 	open coverage/index.html
+
+setup:
+	@git config core.hooksPath .githooks
+	@echo "Git hooks configured."

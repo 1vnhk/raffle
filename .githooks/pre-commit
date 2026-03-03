@@ -1,0 +1,26 @@
+#!/bin/sh
+
+echo "Running pre-commit checks..."
+
+echo "Formatting..."
+STAGED_SOL=$(git diff --cached --name-only --diff-filter=ACM -- '*.sol')
+if [ -n "$STAGED_SOL" ]; then
+    forge fmt $STAGED_SOL
+    echo "$STAGED_SOL" | xargs git add
+fi
+
+echo "Building..."
+forge build
+if [ $? -ne 0 ]; then
+    echo "Build failed. Commit aborted."
+    exit 1
+fi
+
+echo "Running tests..."
+forge test
+if [ $? -ne 0 ]; then
+    echo "Tests failed. Commit aborted."
+    exit 1
+fi
+
+echo "All checks passed."
