@@ -97,14 +97,14 @@ contract Raffle is VRFConsumerBaseV2Plus {
         uint256 winnerIndex = randomWords[0] % s_players.length;
 
         address payable recentWinner = s_players[winnerIndex];
+        s_recentWinner = recentWinner;
+        s_raffleState = RaffleState.OPEN;
 
+        // TODO: move to pull pattern
         (bool success,) = recentWinner.call{value: address(this).balance}("");
         if (!success) {
             revert Raffle__TransferFailed();
         }
-
-        s_recentWinner = recentWinner;
-        s_raffleState = RaffleState.OPEN;
     }
 
     /**
