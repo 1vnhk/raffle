@@ -91,10 +91,10 @@ contract RaffleTest is Test {
 
     function testPickWinnerUpdatesLastTimestamp() public {
         uint256 lastTimestamp = raffle.getLastTimestamp();
-        
+
         vm.warp(block.timestamp + INTERVAL);
         raffle.pickWinner();
-        
+
         assertEq(raffle.getLastTimestamp(), lastTimestamp + INTERVAL);
     }
 }
