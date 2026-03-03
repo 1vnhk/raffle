@@ -100,6 +100,7 @@ contract Raffle is VRFConsumerBaseV2Plus {
         s_recentWinner = recentWinner;
         s_raffleState = RaffleState.OPEN;
         s_players = new address payable[](0);
+        s_lastTimestamp = block.timestamp;
 
         // TODO: move to pull pattern
         (bool success,) = recentWinner.call{value: address(this).balance}("");
