@@ -100,4 +100,24 @@ contract RaffleTest is Test {
 
         assertEq(raffle.getLastTimestamp(), lastTimestamp + INTERVAL);
     }
+
+    // state transitions
+    function testRaffleIsInitializedWithCorrectRaffleState() public view {
+        assertEq(uint256(raffle.getRaffleState()), uint256(Raffle.RaffleState.OPEN));
+    }
+
+    function testRaffleStateChangesWhenWinnerIsPicked() public {
+        vm.warp(block.timestamp + INTERVAL);
+        raffle.pickWinner();
+        assertEq(uint256(raffle.getRaffleState()), uint256(Raffle.RaffleState.CALCULATING_WINNER));
+    }
+
+    function testEnterRevertsWhenRaffleIsNotOpen() public {
+        vm.warp(block.timestamp + INTERVAL);
+        raffle.pickWinner();
+        vm.expectRevert(Raffle.Raffle__RaffleNotOpen.selector);
+        raffle.enter{value: ENTRANCE_FEE}();
+    }
+
+    // ih: TODO: add test for resetting state to open when winner is picked
 }
