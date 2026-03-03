@@ -14,6 +14,12 @@ contract Raffle is VRFConsumerBaseV2Plus {
     error Raffle__IntervalIsTooLow();
     error Raffle__IntervalHasNotPassed();
     error Raffle__TransferFailed();
+    error Raffle__RaffleNotOpen();
+
+    enum RaffleState {
+        OPEN,
+        CALCULATING_WINNER
+    }
 
     uint16 private constant REQUEST_CONFIRMATIONS = 3;
     uint32 private constant NUM_WORDS = 1;
@@ -31,6 +37,7 @@ contract Raffle is VRFConsumerBaseV2Plus {
     address payable[] private s_players;
     uint256 private s_lastTimestamp;
     address private s_recentWinner;
+    RaffleState private s_raffleState;
 
     event Entered(address indexed player);
 
@@ -47,14 +54,17 @@ contract Raffle is VRFConsumerBaseV2Plus {
 
         i_entranceFee = fee;
         i_interval = interval;
-        s_lastTimestamp = block.timestamp;
         i_keyHash = gasLane;
         i_subscriptionId = subscriptionId;
         i_callbackGasLimit = callbackGasLimit;
+
+        s_lastTimestamp = block.timestamp;
+        s_raffleState = RaffleState.OPEN;
     }
 
     function enter() external payable {
         require(msg.value >= i_entranceFee, Raffle__SendMoreToEnterRaffle());
+        require(s_raffleState == RaffleState.OPEN, Raffle__RaffleNotOpen());
 
         s_players.push(payable(msg.sender));
 
@@ -65,6 +75,8 @@ contract Raffle is VRFConsumerBaseV2Plus {
     // Should be called automatically: when?
     function pickWinner() external {
         require(block.timestamp - s_lastTimestamp >= i_interval, Raffle__IntervalHasNotPassed());
+
+        s_raffleState = RaffleState.CALCULATING_WINNER;
 
         // uint256 requestId = s_vrfCoordinator.requestRandomWords(
         //     VRFV2PlusClient.RandomWordsRequest({
@@ -92,6 +104,7 @@ contract Raffle is VRFConsumerBaseV2Plus {
         }
 
         s_recentWinner = recentWinner;
+        s_raffleState = RaffleState.OPEN;
     }
 
     /**
