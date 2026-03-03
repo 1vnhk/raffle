@@ -95,10 +95,11 @@ contract Raffle is VRFConsumerBaseV2Plus {
 
     function fulfillRandomWords(uint256 requestId, uint256[] calldata randomWords) internal override {
         uint256 winnerIndex = randomWords[0] % s_players.length;
-
         address payable recentWinner = s_players[winnerIndex];
+
         s_recentWinner = recentWinner;
         s_raffleState = RaffleState.OPEN;
+        s_players = new address payable[](0);
 
         // TODO: move to pull pattern
         (bool success,) = recentWinner.call{value: address(this).balance}("");
