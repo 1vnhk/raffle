@@ -2,6 +2,7 @@
 pragma solidity ^0.8.33;
 
 import {VRFConsumerBaseV2Plus} from "@chainlink/contracts/src/v0.8/vrf/dev/VRFConsumerBaseV2Plus.sol";
+import {VRFV2PlusClient} from "@chainlink/contracts/src/v0.8/vrf/dev/libraries/VRFV2PlusClient.sol";
 
 /// @title Raffle
 /// @author Ivan Hrekov (1vnhk)
@@ -13,21 +14,41 @@ contract Raffle is VRFConsumerBaseV2Plus {
     error Raffle__IntervalIsTooLow();
     error Raffle__IntervalHasNotPassed();
 
+    uint16 private constant REQUEST_CONFIRMATIONS = 3;
+    uint32 private constant NUM_WORDS = 1;
+
     uint256 private immutable i_entranceFee;
     /// @dev The duration of the raffle in seconds
     uint256 private immutable i_interval;
+    /// @dev The key hash for the VRF
+    bytes32 private immutable i_keyHash;
+    /// @dev The subscription ID for the VRF
+    uint64 private immutable i_subscriptionId;
+    /// @dev The callback gas limit for the VRF
+    uint32 private immutable i_callbackGasLimit;
+
     address payable[] private s_players;
     uint256 private s_lastTimestamp;
 
     event Entered(address indexed player);
 
-    constructor(uint256 fee, uint256 interval, address vrfCoordinator) VRFConsumerBaseV2Plus(vrfCoordinator) {
+    constructor(
+        uint256 fee,
+        uint256 interval,
+        address vrfCoordinator,
+        bytes32 gasLane,
+        uint64 subscriptionId,
+        uint32 callbackGasLimit
+    ) VRFConsumerBaseV2Plus(vrfCoordinator) {
         require(fee > 0, Raffle__FeeIsTooLow());
         require(interval > 0, Raffle__IntervalIsTooLow());
 
         i_entranceFee = fee;
         i_interval = interval;
         s_lastTimestamp = block.timestamp;
+        i_keyHash = gasLane;
+        i_subscriptionId = subscriptionId;
+        i_callbackGasLimit = callbackGasLimit;
     }
 
     function enter() external payable {
@@ -43,6 +64,18 @@ contract Raffle is VRFConsumerBaseV2Plus {
     // Should be called automatically: when?
     function pickWinner() external {
         require(block.timestamp - s_lastTimestamp >= i_interval, Raffle__IntervalHasNotPassed());
+
+        // uint256 requestId = s_vrfCoordinator.requestRandomWords(
+        //     VRFV2PlusClient.RandomWordsRequest({
+        //         keyHash: i_keyHash,
+        //         subId: i_subscriptionId,
+        //         requestConfirmations: REQUEST_CONFIRMATIONS,
+        //         callbackGasLimit: i_callbackGasLimit,
+        //         numWords: NUM_WORDS,
+        //         // Set nativePayment to true to pay for VRF requests with Sepolia ETH instead of LINK
+        //         extraArgs: VRFV2PlusClient._argsToBytes(VRFV2PlusClient.ExtraArgsV1({nativePayment: false}))
+        //     })
+        // );
 
         s_lastTimestamp = block.timestamp;
     }

@@ -13,21 +13,24 @@ contract RaffleTest is Test {
 
     address PLAYER = makeAddr("player");
     address vrfCoordinator = makeAddr("vrfCoordinator");
+    bytes32 gasLane = bytes32(abi.encodePacked(keccak256("gasLane")));
+    uint64 subscriptionId = 123;
+    uint32 callbackGasLimit = 25_000;
 
     function setUp() public {
-        raffle = new Raffle(ENTRANCE_FEE, INTERVAL, vrfCoordinator);
+        raffle = new Raffle(ENTRANCE_FEE, INTERVAL, vrfCoordinator, gasLane, subscriptionId, callbackGasLimit);
 
         vm.deal(PLAYER, STARTING_PLAYER_BALANCE);
     }
 
     function testRaffleRevertsWhenFeeIsZero() public {
         vm.expectRevert(Raffle.Raffle__FeeIsTooLow.selector);
-        new Raffle(0, INTERVAL, vrfCoordinator);
+        new Raffle(0, INTERVAL, vrfCoordinator, gasLane, subscriptionId, callbackGasLimit);
     }
 
     function testRaffleRevertsWhenIntervalIsZero() public {
         vm.expectRevert(Raffle.Raffle__IntervalIsTooLow.selector);
-        new Raffle(ENTRANCE_FEE, 0, vrfCoordinator);
+        new Raffle(ENTRANCE_FEE, 0, vrfCoordinator, gasLane, subscriptionId, callbackGasLimit);
     }
 
     function testRaffleIsInitializedWithCorrectEntranceFee() public view {
