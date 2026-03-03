@@ -15,6 +15,7 @@ docs/
 
 # Lib
 /lib
+lib/
 
 # Coverage
 lcov.info

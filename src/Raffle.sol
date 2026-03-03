@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.33;
 
+import {VRFConsumerBaseV2Plus} from "@chainlink/contracts/src/v0.8/vrf/dev/VRFConsumerBaseV2Plus.sol";
+
 /// @title Raffle
 /// @author Ivan Hrekov (1vnhk)
 /// @notice This contract is for creating a sample raffle (lottery)
 /// @dev Implements Chainlink VRFv2.5
-contract Raffle {
+contract Raffle is VRFConsumerBaseV2Plus {
     error Raffle__SendMoreToEnterRaffle();
     error Raffle__FeeIsTooLow();
     error Raffle__IntervalIsTooLow();
@@ -19,7 +21,7 @@ contract Raffle {
 
     event Entered(address indexed player);
 
-    constructor(uint256 fee, uint256 interval) {
+    constructor(uint256 fee, uint256 interval, address vrfCoordinator) VRFConsumerBaseV2Plus(vrfCoordinator) {
         require(fee > 0, Raffle__FeeIsTooLow());
         require(interval > 0, Raffle__IntervalIsTooLow());
 
@@ -43,6 +45,10 @@ contract Raffle {
         require(block.timestamp - s_lastTimestamp >= i_interval, Raffle__IntervalHasNotPassed());
 
         s_lastTimestamp = block.timestamp;
+    }
+
+    function fulfillRandomWords(uint256 requestId, uint256[] calldata randomWords) internal override {
+        // TODO: Implement
     }
 
     /**

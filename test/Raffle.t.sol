@@ -9,23 +9,25 @@ contract RaffleTest is Test {
 
     uint256 constant ENTRANCE_FEE = 100 gwei;
     uint256 constant STARTING_PLAYER_BALANCE = 1 ether;
-    address PLAYER = makeAddr("player");
     uint256 constant INTERVAL = 1 days;
 
+    address PLAYER = makeAddr("player");
+    address vrfCoordinator = makeAddr("vrfCoordinator");
+
     function setUp() public {
-        raffle = new Raffle(ENTRANCE_FEE, INTERVAL);
+        raffle = new Raffle(ENTRANCE_FEE, INTERVAL, vrfCoordinator);
 
         vm.deal(PLAYER, STARTING_PLAYER_BALANCE);
     }
 
     function testRaffleRevertsWhenFeeIsZero() public {
         vm.expectRevert(Raffle.Raffle__FeeIsTooLow.selector);
-        new Raffle(0, INTERVAL);
+        new Raffle(0, INTERVAL, vrfCoordinator);
     }
 
     function testRaffleRevertsWhenIntervalIsZero() public {
         vm.expectRevert(Raffle.Raffle__IntervalIsTooLow.selector);
-        new Raffle(ENTRANCE_FEE, 0);
+        new Raffle(ENTRANCE_FEE, 0, vrfCoordinator);
     }
 
     function testRaffleIsInitializedWithCorrectEntranceFee() public view {
