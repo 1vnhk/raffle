@@ -90,8 +90,6 @@ contract Raffle is VRFConsumerBaseV2Plus {
         //         extraArgs: VRFV2PlusClient._argsToBytes(VRFV2PlusClient.ExtraArgsV1({nativePayment: false}))
         //     })
         // );
-
-        s_lastTimestamp = block.timestamp;
     }
 
     function fulfillRandomWords(uint256 requestId, uint256[] calldata randomWords) internal override {
