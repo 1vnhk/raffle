@@ -10,6 +10,6 @@ remappings = [
 line_length = 120
 
 [lint]
-ignore = ["screaming-snake-case-immutable", "mixed-case-variable"]
+exclude_lints = ["screaming-snake-case-immutable", "mixed-case-variable"]
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
