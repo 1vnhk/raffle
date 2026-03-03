@@ -40,6 +40,7 @@ contract Raffle is VRFConsumerBaseV2Plus {
     RaffleState private s_raffleState;
 
     event Entered(address indexed player);
+    event WinnerPicked(address indexed winner);
 
     constructor(
         uint256 fee,
@@ -107,6 +108,8 @@ contract Raffle is VRFConsumerBaseV2Plus {
         if (!success) {
             revert Raffle__TransferFailed();
         }
+
+        emit WinnerPicked(s_recentWinner);
     }
 
     /**
