@@ -103,13 +103,13 @@ contract Raffle is VRFConsumerBaseV2Plus {
         s_players = new address payable[](0);
         s_lastTimestamp = block.timestamp;
 
+        emit WinnerPicked(s_recentWinner);
+
         // TODO: move to pull pattern
         (bool success,) = recentWinner.call{value: address(this).balance}("");
         if (!success) {
             revert Raffle__TransferFailed();
         }
-
-        emit WinnerPicked(s_recentWinner);
     }
 
     /**
