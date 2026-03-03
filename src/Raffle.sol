@@ -40,7 +40,7 @@ contract Raffle is VRFConsumerBaseV2Plus {
     RaffleState private s_raffleState;
 
     event Entered(address indexed player);
-    event WinnerPicked(address indexed winner);
+    event WinnerPicked(address indexed winner, uint256 prize);
 
     constructor(
         uint256 fee,
@@ -76,6 +76,7 @@ contract Raffle is VRFConsumerBaseV2Plus {
     // Should be called automatically: when?
     function pickWinner() external {
         require(block.timestamp - s_lastTimestamp >= i_interval, Raffle__IntervalHasNotPassed());
+        require(s_raffleState == RaffleState.OPEN, Raffle__RaffleNotOpen());
 
         s_raffleState = RaffleState.CALCULATING_WINNER;
 
@@ -98,10 +99,10 @@ contract Raffle is VRFConsumerBaseV2Plus {
 
         s_recentWinner = recentWinner;
         s_raffleState = RaffleState.OPEN;
-        s_players = new address payable[](0);
+        s_players = new address payable[](0); // TODO: use delete
         s_lastTimestamp = block.timestamp;
 
-        emit WinnerPicked(s_recentWinner);
+        emit WinnerPicked(s_recentWinner, address(this).balance); // TODO: add tests for this
 
         // TODO: move to pull pattern
         (bool success,) = recentWinner.call{value: address(this).balance}("");
