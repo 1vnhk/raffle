@@ -13,6 +13,7 @@ contract Raffle is VRFConsumerBaseV2Plus {
     error Raffle__FeeIsTooLow();
     error Raffle__IntervalIsTooLow();
     error Raffle__IntervalHasNotPassed();
+    error Raffle__TransferFailed();
 
     uint16 private constant REQUEST_CONFIRMATIONS = 3;
     uint32 private constant NUM_WORDS = 1;
@@ -29,6 +30,7 @@ contract Raffle is VRFConsumerBaseV2Plus {
 
     address payable[] private s_players;
     uint256 private s_lastTimestamp;
+    address private s_recentWinner;
 
     event Entered(address indexed player);
 
@@ -59,7 +61,6 @@ contract Raffle is VRFConsumerBaseV2Plus {
         emit Entered(msg.sender);
     }
 
-    // How to get a random number?
     // Use random number to pick a winner
     // Should be called automatically: when?
     function pickWinner() external {
@@ -81,7 +82,16 @@ contract Raffle is VRFConsumerBaseV2Plus {
     }
 
     function fulfillRandomWords(uint256 requestId, uint256[] calldata randomWords) internal override {
-        // TODO: Implement
+        uint256 winnerIndex = randomWords[0] % s_players.length;
+
+        address payable recentWinner = s_players[winnerIndex];
+
+        (bool success,) = recentWinner.call{value: address(this).balance}("");
+        if (!success) {
+            revert Raffle__TransferFailed();
+        }
+
+        s_recentWinner = recentWinner;
     }
 
     /**
