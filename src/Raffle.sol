@@ -15,6 +15,7 @@ contract Raffle is VRFConsumerBaseV2Plus {
     error Raffle__IntervalHasNotPassed();
     error Raffle__TransferFailed();
     error Raffle__RaffleNotOpen();
+    error Raffle__UpkeepNotNeeded();
 
     enum RaffleState {
         OPEN,
@@ -72,25 +73,57 @@ contract Raffle is VRFConsumerBaseV2Plus {
         emit Entered(msg.sender);
     }
 
-    // Use random number to pick a winner
-    // Should be called automatically: when?
-    function pickWinner() external {
-        require(block.timestamp - s_lastTimestamp >= i_interval, Raffle__IntervalHasNotPassed());
-        require(s_raffleState == RaffleState.OPEN, Raffle__RaffleNotOpen());
+    /// When should the winner be picked?
+    /// @dev this is the function that Chainlink nodes will call to see
+    /// if the lottery is ready to have the winner picked.
+    /// The following should be true in order for upkeepNeeded to be true:
+    /// 1. Lottery should be open
+    /// 2. The lottery is open
+    /// 3. The contract has ETH
+    /// 4. Implicitly, the subscription is funded with LINK or ETH
+    /// @param - ignored
+    /// @return upkeepNeeded - true if it's time to pick a winner and restart a lottery
+    /// @return - ignored
+    function checkUpkeep(
+        bytes memory /* checkData */
+    )
+        public
+        view
+        returns (
+            bool upkeepNeeded,
+            bytes memory /* performData */
+        )
+    {
+        bool timeHasPassed = (block.timestamp - s_lastTimestamp) >= i_interval;
+        bool isOpen = s_raffleState == RaffleState.OPEN;
+        bool hasBalance = address(this).balance > 0;
+        bool hasPlayers = s_players.length > 0;
+        return (timeHasPassed && isOpen && hasBalance && hasPlayers, "");
+    }
+
+    function performUpkeep(
+        bytes memory /* performData */
+    )
+        external
+    {
+        (bool upkeepNeeded,) = checkUpkeep("");
+        if (!upkeepNeeded) {
+            revert Raffle__UpkeepNotNeeded();
+        }
 
         s_raffleState = RaffleState.CALCULATING_WINNER;
 
-        // uint256 requestId = s_vrfCoordinator.requestRandomWords(
-        //     VRFV2PlusClient.RandomWordsRequest({
-        //         keyHash: i_keyHash,
-        //         subId: i_subscriptionId,
-        //         requestConfirmations: REQUEST_CONFIRMATIONS,
-        //         callbackGasLimit: i_callbackGasLimit,
-        //         numWords: NUM_WORDS,
-        //         // Set nativePayment to true to pay for VRF requests with Sepolia ETH instead of LINK
-        //         extraArgs: VRFV2PlusClient._argsToBytes(VRFV2PlusClient.ExtraArgsV1({nativePayment: false}))
-        //     })
-        // );
+        uint256 requestId = s_vrfCoordinator.requestRandomWords(
+            VRFV2PlusClient.RandomWordsRequest({
+                keyHash: i_keyHash,
+                subId: i_subscriptionId,
+                requestConfirmations: REQUEST_CONFIRMATIONS,
+                callbackGasLimit: i_callbackGasLimit,
+                numWords: NUM_WORDS,
+                // Set nativePayment to true to pay for VRF requests with Sepolia ETH instead of LINK
+                extraArgs: VRFV2PlusClient._argsToBytes(VRFV2PlusClient.ExtraArgsV1({nativePayment: false}))
+            })
+        );
     }
 
     function fulfillRandomWords(uint256 requestId, uint256[] calldata randomWords) internal override {

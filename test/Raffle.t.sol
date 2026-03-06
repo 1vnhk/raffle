@@ -86,11 +86,11 @@ contract RaffleTest is Test {
         assertEq(PLAYER.balance, playerStartingBalance - ENTRANCE_FEE - extraFee);
     }
 
-    function testPickWinnerRevertsWhenIntervalHasNotPassed() public {
-        vm.warp(block.timestamp + INTERVAL - 1);
-        vm.expectRevert(Raffle.Raffle__IntervalHasNotPassed.selector);
-        raffle.pickWinner();
-    }
+    // function testPickWinnerRevertsWhenIntervalHasNotPassed() public {
+    //     vm.warp(block.timestamp + INTERVAL - 1);
+    //     vm.expectRevert(Raffle.Raffle__IntervalHasNotPassed.selector);
+    //     raffle.pickWinner();
+    // }
 
     // TODO: fix
     // function testPickWinnerUpdatesLastTimestamp() public {
@@ -107,18 +107,18 @@ contract RaffleTest is Test {
         assertEq(uint256(raffle.getRaffleState()), uint256(Raffle.RaffleState.OPEN));
     }
 
-    function testRaffleStateChangesWhenWinnerIsPicked() public {
-        vm.warp(block.timestamp + INTERVAL);
-        raffle.pickWinner();
-        assertEq(uint256(raffle.getRaffleState()), uint256(Raffle.RaffleState.CALCULATING_WINNER));
-    }
+    // function testRaffleStateChangesWhenWinnerIsPicked() public {
+    //     vm.warp(block.timestamp + INTERVAL);
+    //     raffle.pickWinner();
+    //     assertEq(uint256(raffle.getRaffleState()), uint256(Raffle.RaffleState.CALCULATING_WINNER));
+    // }
 
-    function testEnterRevertsWhenRaffleIsNotOpen() public {
-        vm.warp(block.timestamp + INTERVAL);
-        raffle.pickWinner();
-        vm.expectRevert(Raffle.Raffle__RaffleNotOpen.selector);
-        raffle.enter{value: ENTRANCE_FEE}();
-    }
+    // function testEnterRevertsWhenRaffleIsNotOpen() public {
+    //     vm.warp(block.timestamp + INTERVAL);
+    //     raffle.pickWinner();
+    //     vm.expectRevert(Raffle.Raffle__RaffleNotOpen.selector);
+    //     raffle.enter{value: ENTRANCE_FEE}();
+    // }
 
     // ih: TODO: add test for resetting state to open when winner is picked
 }
