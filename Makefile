@@ -13,7 +13,7 @@ test:
 
 coverage:
 	@forge coverage --report lcov
-	genhtml lcov.info -o coverage --branch-coverage
+	genhtml lcov.info -o coverage --branch-coverage --ignore-errors inconsistent
 	open coverage/index.html
 
 setup:

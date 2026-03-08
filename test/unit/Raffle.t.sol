@@ -36,28 +36,17 @@ contract RaffleTest is Test {
         vm.deal(PLAYER, STARTING_PLAYER_BALANCE);
     }
 
+    /*//////////////////////////////////////////////////////////////
+                            INITIALIZATION
+    //////////////////////////////////////////////////////////////*/
     function testRaffleRevertsWhenFeeIsZero() public {
         vm.expectRevert(Raffle.Raffle__FeeIsTooLow.selector);
-        new Raffle(
-            0,
-            interval,
-            vrfCoordinator,
-            gasLane,
-            subscriptionId,
-            callbackGasLimit
-        );
+        new Raffle(0, interval, vrfCoordinator, gasLane, subscriptionId, callbackGasLimit);
     }
 
     function testRaffleRevertsWhenIntervalIsZero() public {
         vm.expectRevert(Raffle.Raffle__IntervalIsTooLow.selector);
-        new Raffle(
-            interval,
-            0,
-            vrfCoordinator,
-            gasLane,
-            subscriptionId,
-            callbackGasLimit
-        );
+        new Raffle(interval, 0, vrfCoordinator, gasLane, subscriptionId, callbackGasLimit);
     }
 
     function testRaffleIsInitializedWithCorrectEntranceFee() public view {
@@ -72,6 +61,9 @@ contract RaffleTest is Test {
         assertEq(raffle.getLastTimestamp(), block.timestamp);
     }
 
+    /*//////////////////////////////////////////////////////////////
+                             ENTER RAFFLE
+    //////////////////////////////////////////////////////////////*/
     modifier player() {
         vm.prank(PLAYER);
         _;
@@ -109,14 +101,8 @@ contract RaffleTest is Test {
         uint256 extraFee = 100 gwei;
         raffle.enter{value: entranceFee + extraFee}();
 
-        assertEq(
-            address(raffle).balance,
-            raffleStartingBalance + entranceFee + extraFee
-        );
-        assertEq(
-            PLAYER.balance,
-            playerStartingBalance - entranceFee - extraFee
-        );
+        assertEq(address(raffle).balance, raffleStartingBalance + entranceFee + extraFee);
+        assertEq(PLAYER.balance, playerStartingBalance - entranceFee - extraFee);
     }
 
     // function testPickWinnerRevertsWhenIntervalHasNotPassed() public {
