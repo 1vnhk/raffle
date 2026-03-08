@@ -2,43 +2,70 @@
 pragma solidity ^0.8.33;
 
 import {Test} from "forge-std/Test.sol";
-import {Raffle} from "../src/Raffle.sol";
+import {DeployRaffle} from "script/DeployRaffle.s.sol";
+import {HelperConfig} from "script/HelperConfig.s.sol";
+import {Raffle} from "src/Raffle.sol";
 
 contract RaffleTest is Test {
     Raffle raffle;
+    HelperConfig helperConfig;
 
-    uint256 constant ENTRANCE_FEE = 100 gwei;
-    uint256 constant STARTING_PLAYER_BALANCE = 1 ether;
-    uint256 constant INTERVAL = 1 days;
+    uint256 entranceFee;
+    uint256 interval;
+    address vrfCoordinator;
+    bytes32 gasLane;
+    uint32 callbackGasLimit;
+    uint64 subscriptionId;
 
     address PLAYER = makeAddr("player");
-    address vrfCoordinator = makeAddr("vrfCoordinator");
-    bytes32 gasLane = bytes32(abi.encodePacked(keccak256("gasLane")));
-    uint64 subscriptionId = 123;
-    uint32 callbackGasLimit = 25_000;
+    uint256 constant STARTING_PLAYER_BALANCE = 10 ether;
 
     function setUp() public {
-        raffle = new Raffle(ENTRANCE_FEE, INTERVAL, vrfCoordinator, gasLane, subscriptionId, callbackGasLimit);
+        DeployRaffle deployer = new DeployRaffle();
+        (raffle, helperConfig) = deployer.deployRaffle();
+
+        HelperConfig.NetworkConfig memory config = helperConfig.getConfig();
+
+        entranceFee = config.entranceFee;
+        interval = config.interval;
+        vrfCoordinator = config.vrfCoordinator;
+        gasLane = config.gasLane;
+        callbackGasLimit = config.callbackGasLimit;
+        subscriptionId = config.subscriptionId;
 
         vm.deal(PLAYER, STARTING_PLAYER_BALANCE);
     }
 
     function testRaffleRevertsWhenFeeIsZero() public {
         vm.expectRevert(Raffle.Raffle__FeeIsTooLow.selector);
-        new Raffle(0, INTERVAL, vrfCoordinator, gasLane, subscriptionId, callbackGasLimit);
+        new Raffle(
+            0,
+            interval,
+            vrfCoordinator,
+            gasLane,
+            subscriptionId,
+            callbackGasLimit
+        );
     }
 
     function testRaffleRevertsWhenIntervalIsZero() public {
         vm.expectRevert(Raffle.Raffle__IntervalIsTooLow.selector);
-        new Raffle(ENTRANCE_FEE, 0, vrfCoordinator, gasLane, subscriptionId, callbackGasLimit);
+        new Raffle(
+            interval,
+            0,
+            vrfCoordinator,
+            gasLane,
+            subscriptionId,
+            callbackGasLimit
+        );
     }
 
     function testRaffleIsInitializedWithCorrectEntranceFee() public view {
-        assertEq(raffle.getEntranceFee(), ENTRANCE_FEE);
+        assertEq(raffle.getEntranceFee(), entranceFee);
     }
 
     function testRaffleIsInitializedWithCorrectInterval() public view {
-        assertEq(raffle.getInterval(), INTERVAL);
+        assertEq(raffle.getInterval(), interval);
     }
 
     function testRaffleIsInitializedWithCorrectLastTimestamp() public view {
@@ -52,11 +79,11 @@ contract RaffleTest is Test {
 
     function testEnterRevertsWhenPlayerPaysLessThanEntranceFee() public player {
         vm.expectRevert(Raffle.Raffle__SendMoreToEnterRaffle.selector);
-        raffle.enter{value: ENTRANCE_FEE - 1}();
+        raffle.enter{value: entranceFee - 1}();
     }
 
     function testEnterAddsPlayerToPlayersArray() public player {
-        raffle.enter{value: ENTRANCE_FEE}();
+        raffle.enter{value: entranceFee}();
 
         assertEq(raffle.getPlayer(0), PLAYER);
     }
@@ -64,26 +91,32 @@ contract RaffleTest is Test {
     function testEnterEmitsEvent() public player {
         vm.expectEmit(true, false, false, false, address(raffle));
         emit Raffle.Entered(PLAYER);
-        raffle.enter{value: ENTRANCE_FEE}();
+        raffle.enter{value: entranceFee}();
     }
 
     function testEnterIncreasesContractBalance() public player {
         uint256 raffleStartingBalance = address(raffle).balance;
         uint256 playerStartingBalance = PLAYER.balance;
-        raffle.enter{value: ENTRANCE_FEE}();
+        raffle.enter{value: entranceFee}();
 
-        assertEq(address(raffle).balance, raffleStartingBalance + ENTRANCE_FEE);
-        assertEq(PLAYER.balance, playerStartingBalance - ENTRANCE_FEE);
+        assertEq(address(raffle).balance, raffleStartingBalance + entranceFee);
+        assertEq(PLAYER.balance, playerStartingBalance - entranceFee);
     }
 
     function testEnterKeepsSentFeeEvenIfItsMoreThanEntranceFee() public player {
         uint256 raffleStartingBalance = address(raffle).balance;
         uint256 playerStartingBalance = PLAYER.balance;
         uint256 extraFee = 100 gwei;
-        raffle.enter{value: ENTRANCE_FEE + extraFee}();
+        raffle.enter{value: entranceFee + extraFee}();
 
-        assertEq(address(raffle).balance, raffleStartingBalance + ENTRANCE_FEE + extraFee);
-        assertEq(PLAYER.balance, playerStartingBalance - ENTRANCE_FEE - extraFee);
+        assertEq(
+            address(raffle).balance,
+            raffleStartingBalance + entranceFee + extraFee
+        );
+        assertEq(
+            PLAYER.balance,
+            playerStartingBalance - entranceFee - extraFee
+        );
     }
 
     // function testPickWinnerRevertsWhenIntervalHasNotPassed() public {
@@ -103,8 +136,8 @@ contract RaffleTest is Test {
     // }
 
     // state transitions
-    function testRaffleIsInitializedWithCorrectRaffleState() public view {
-        assertEq(uint256(raffle.getRaffleState()), uint256(Raffle.RaffleState.OPEN));
+    function testRaffleIsInitializedInOpenState() public view {
+        assert(raffle.getRaffleState() == Raffle.RaffleState.OPEN);
     }
 
     // function testRaffleStateChangesWhenWinnerIsPicked() public {
