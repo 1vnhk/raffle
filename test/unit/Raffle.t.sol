@@ -78,7 +78,6 @@ contract RaffleTest is Test {
         raffle.enter{value: entranceFee - 1}();
     }
 
-    // TODO: fix
     function testDontAllowPlayersToEnterWhileRaffleIsCalculating() public {
         raffle.enter{value: entranceFee}();
 
