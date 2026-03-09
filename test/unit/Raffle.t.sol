@@ -15,7 +15,7 @@ contract RaffleTest is Test {
     address vrfCoordinator;
     bytes32 gasLane;
     uint32 callbackGasLimit;
-    uint64 subscriptionId;
+    uint256 subscriptionId;
 
     address PLAYER = makeAddr("player");
     uint256 constant STARTING_PLAYER_BALANCE = 10 ether;
@@ -61,6 +61,10 @@ contract RaffleTest is Test {
         assertEq(raffle.getLastTimestamp(), block.timestamp);
     }
 
+    function testRaffleIsInitializedInOpenState() public view {
+        assert(raffle.getRaffleState() == Raffle.RaffleState.OPEN);
+    }
+
     /*//////////////////////////////////////////////////////////////
                              ENTER RAFFLE
     //////////////////////////////////////////////////////////////*/
@@ -72,6 +76,19 @@ contract RaffleTest is Test {
     function testEnterRevertsWhenPlayerPaysLessThanEntranceFee() public player {
         vm.expectRevert(Raffle.Raffle__SendMoreToEnterRaffle.selector);
         raffle.enter{value: entranceFee - 1}();
+    }
+
+    // TODO: fix
+    function testDontAllowPlayersToEnterWhileRaffleIsCalculating() public {
+        raffle.enter{value: entranceFee}();
+
+        vm.warp(block.timestamp + interval + 1);
+        vm.roll(block.number + 1);
+        raffle.performUpkeep("");
+
+        vm.expectRevert(Raffle.Raffle__RaffleNotOpen.selector);
+        vm.prank(PLAYER);
+        raffle.enter{value: entranceFee}();
     }
 
     function testEnterAddsPlayerToPlayersArray() public player {
@@ -119,17 +136,6 @@ contract RaffleTest is Test {
     //     raffle.pickWinner();
 
     //     assertEq(raffle.getLastTimestamp(), lastTimestamp + INTERVAL);
-    // }
-
-    // state transitions
-    function testRaffleIsInitializedInOpenState() public view {
-        assert(raffle.getRaffleState() == Raffle.RaffleState.OPEN);
-    }
-
-    // function testRaffleStateChangesWhenWinnerIsPicked() public {
-    //     vm.warp(block.timestamp + INTERVAL);
-    //     raffle.pickWinner();
-    //     assertEq(uint256(raffle.getRaffleState()), uint256(Raffle.RaffleState.CALCULATING_WINNER));
     // }
 
     // function testEnterRevertsWhenRaffleIsNotOpen() public {

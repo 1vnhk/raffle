@@ -31,7 +31,7 @@ contract Raffle is VRFConsumerBaseV2Plus {
     /// @dev The key hash for the VRF
     bytes32 private immutable i_keyHash;
     /// @dev The subscription ID for the VRF
-    uint64 private immutable i_subscriptionId;
+    uint256 private immutable i_subscriptionId;
     /// @dev The callback gas limit for the VRF
     uint32 private immutable i_callbackGasLimit;
 
@@ -48,7 +48,7 @@ contract Raffle is VRFConsumerBaseV2Plus {
         uint256 interval,
         address vrfCoordinator,
         bytes32 gasLane,
-        uint64 subscriptionId,
+        uint256 subscriptionId,
         uint32 callbackGasLimit
     ) VRFConsumerBaseV2Plus(vrfCoordinator) {
         require(fee > 0, Raffle__FeeIsTooLow());

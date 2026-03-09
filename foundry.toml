@@ -6,9 +6,6 @@ remappings = [
   '@chainlink/contracts/=lib/chainlink-brownie-contracts/contracts/',
 ]
 
-[fmt]
-line_length = 120
-
 [lint]
 exclude_lints = ["screaming-snake-case-immutable", "mixed-case-variable"]
 
