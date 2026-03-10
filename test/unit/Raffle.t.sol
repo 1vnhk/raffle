@@ -5,6 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {DeployRaffle} from "script/DeployRaffle.s.sol";
 import {HelperConfig} from "script/HelperConfig.s.sol";
 import {Raffle} from "src/Raffle.sol";
+import {Vm} from "forge-std/Vm.sol";
 
 contract RaffleTest is Test {
     Raffle raffle;
@@ -141,5 +142,43 @@ contract RaffleTest is Test {
         (bool upkeepNeeded,) = raffle.checkUpkeep("");
 
         assertEq(upkeepNeeded, false);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                             PEFRORM UPKEEP
+    //////////////////////////////////////////////////////////////*/
+    function testPerformUpkeepCanOnlyRunIfCheckUpkeepIsTrue() public player timePassed {
+        raffle.enter{value: entranceFee}();
+
+        raffle.performUpkeep("");
+    }
+
+    function testPerformUpkeepRevertsIfCheckUpkeepIsFalse() public {
+        uint256 balance = 0;
+        uint256 numPlayers = 0;
+        Raffle.RaffleState state = raffle.getRaffleState();
+
+        vm.prank(PLAYER);
+        raffle.enter{value: entranceFee}();
+        balance += entranceFee;
+        numPlayers += 1;
+
+        vm.warp(block.timestamp + 1);
+        vm.roll(block.number + 1);
+        vm.expectRevert(abi.encodeWithSelector(Raffle.Raffle__UpkeepNotNeeded.selector, balance, numPlayers, state));
+        raffle.performUpkeep("");
+    }
+
+    function testPerformUpkeepUpdatesRaffleStateAndEmitsRequestId() public player timePassed {
+        raffle.enter{value: entranceFee}();
+
+        vm.recordLogs();
+        raffle.performUpkeep("");
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+        bytes32 requestId = entries[1].topics[1];
+
+        Raffle.RaffleState state = raffle.getRaffleState();
+        assert(uint256(requestId) > 0);
+        assert(state == Raffle.RaffleState.CALCULATING_WINNER);
     }
 }
