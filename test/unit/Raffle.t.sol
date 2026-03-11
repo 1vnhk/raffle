@@ -3,12 +3,12 @@ pragma solidity ^0.8.33;
 
 import {Test} from "forge-std/Test.sol";
 import {DeployRaffle} from "script/DeployRaffle.s.sol";
-import {HelperConfig} from "script/HelperConfig.s.sol";
+import {HelperConfig, CodeConstants} from "script/HelperConfig.s.sol";
 import {Raffle} from "src/Raffle.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {VRFCoordinatorV2_5Mock} from "@chainlink/contracts/src/v0.8/vrf/mocks/VRFCoordinatorV2_5Mock.sol";
 
-contract RaffleTest is Test {
+contract RaffleTest is Test, CodeConstants {
     Raffle raffle;
     HelperConfig helperConfig;
 
@@ -155,7 +155,7 @@ contract RaffleTest is Test {
     }
 
     function testPerformUpkeepRevertsIfCheckUpkeepIsFalse() public {
-        uint256 balance = 0;
+        uint256 balance = address(raffle).balance;
         uint256 numPlayers = 0;
         Raffle.RaffleState state = raffle.getRaffleState();
 
@@ -186,14 +186,26 @@ contract RaffleTest is Test {
     /*//////////////////////////////////////////////////////////////
                           FULFILL RANDOM WORDS
     //////////////////////////////////////////////////////////////*/
-    function testFulfillRandomWordsCanOnlyBeCalledAfterPerformUpkeep(uint256 randomRequestId) public player timePassed {
+    modifier skipFork() {
+        if (block.chainid != LOCAL_CHAIN_ID) {
+            return;
+        }
+        _;
+    }
+
+    function testFulfillRandomWordsCanOnlyBeCalledAfterPerformUpkeep(uint256 randomRequestId)
+        public
+        player
+        timePassed
+        skipFork
+    {
         raffle.enter{value: entranceFee}();
 
         vm.expectRevert(VRFCoordinatorV2_5Mock.InvalidRequest.selector);
         VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(randomRequestId, address(raffle));
     }
 
-    function testFulfillRandomWordsPicksAWinnerResetsAndSetsMoney() public player timePassed {
+    function testFulfillRandomWordsPicksAWinnerResetsAndSetsMoney() public player timePassed skipFork {
         raffle.enter{value: entranceFee}();
 
         uint256 additionalEntrants = 3;

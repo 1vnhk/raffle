@@ -1,6 +1,6 @@
 -include .env
 
-.PHONY: build format test coverage setup
+.PHONY: build format test-unit coverage setup test-sepolia
 
 build:
 	@forge build
@@ -8,8 +8,11 @@ build:
 format:
 	@forge fmt
 
-test:
+test-unit:
 	@forge test -vvv
+
+test-sepolia:
+	forge test --fork-url $(SEPOLIA_RPC_URL) -vvv
 
 coverage:
 	@forge coverage --report lcov
