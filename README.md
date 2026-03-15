@@ -4,6 +4,21 @@ A trustless, automated on-chain raffle (lottery) built with Solidity and Foundry
 
 Players enter by sending ETH. After a configurable interval, Chainlink Automation triggers winner selection. Chainlink VRF provides verifiable randomness to pick the winner. Winners claim their prize via a pull-based withdrawal.
 
+## Sepolia Deployment
+
+**Verified contract**: [`0x878081d66cf5220b036A53804e9A034E02B3ea29`](https://sepolia.etherscan.io/address/0x878081d66cf5220b036A53804e9A034E02B3ea29)
+
+The contract has been deployed, entered, and a winner was picked and claimed via Chainlink VRF and Automation on Sepolia testnet.
+
+| Parameter       | Value                                        |
+|----------------|----------------------------------------------|
+| VRF Coordinator | `0x9DdfaCa8183c41ad55329BdeeD9F6A8d53168B1B` |
+| LINK Token      | `0x779877A7B0D9E8603169DdbD7836e478b4624789` |
+| Gas Lane        | `0x787d74caea10b2b357790d5b5247c2f63d1d91572a9846f780606e4d953677ae` |
+| Entrance Fee    | 0.01 ETH                                     |
+| Interval        | 30 seconds                                   |
+| Callback Gas Limit | 100,000                                   |
+
 ## How It Works
 
 1. Players call `enter()` with exactly the entrance fee in ETH
@@ -126,16 +141,6 @@ make deploy
 ```bash
 make deploy ARGS="--network sepolia"
 ```
-
-## Sepolia Deployment
-
-| Parameter       | Value                                        |
-|----------------|----------------------------------------------|
-| VRF Coordinator | `0x9DdfaCa8183c41ad55329BdeeD9F6A8d53168B1B` |
-| LINK Token      | `0x779877A7B0D9E8603169DdbD7836e478b4624789` |
-| Gas Lane        | `0x787d74caea10b2b357790d5b5247c2f63d1d91572a9846f780606e4d953677ae` |
-| Entrance Fee    | 0.01 ETH                                     |
-| Interval        | 30 seconds                                   |
 
 ## Future Improvements
 
