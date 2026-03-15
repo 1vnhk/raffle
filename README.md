@@ -46,6 +46,12 @@ This prevents two failure modes:
 
 The tradeoff is UX: winners must send a second transaction to claim. In practice, this is standard in DeFi (vesting, airdrops, yield protocols all use pull patterns).
 
+### Running prize pool counter
+
+The prize for each round is `address(this).balance - s_totalPendingPrizes` — the contract's ETH balance minus all unclaimed prizes owed to previous winners.
+
+A naive approach would look up each past winner's pending balance, but that requires knowing *who* to look up and scales with the number of unclaimed winners. Instead, a single `s_totalPendingPrizes` counter is incremented when a prize is credited and decremented when a prize is claimed. This keeps the prize calculation O(1) and correct regardless of how many winners haven't claimed yet.
+
 ## Requirements
 
 - [Foundry](https://book.getfoundry.sh/getting-started/installation)
@@ -131,4 +137,5 @@ make deploy ARGS="--network sepolia"
 - No owner privileges after deployment — fully trustless
 - Round-based architecture ensures O(1) gas cost in VRF callback regardless of player count
 - Pull pattern prevents DoS by reverting winners
+- Running `s_totalPendingPrizes` counter ensures prize calculation is always solvent, even with multiple unclaimed winners across rounds
 - Follows checks-effects-interactions pattern throughout

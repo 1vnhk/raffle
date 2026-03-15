@@ -369,6 +369,63 @@ contract RaffleTest is Test, CodeConstants {
         vm.stopPrank();
     }
 
+    function testPrizeIsCorrectWhenMultipleWinnersDoNotClaim() public timePassed skipFork {
+        address alice = makeAddr("alice");
+        address bob = makeAddr("bob");
+        address charlie = makeAddr("charlie");
+        vm.deal(alice, STARTING_PLAYER_BALANCE);
+        vm.deal(bob, STARTING_PLAYER_BALANCE);
+        vm.deal(charlie, STARTING_PLAYER_BALANCE);
+
+        // Round 0: Alice enters and wins, does NOT claim
+        vm.prank(alice);
+        raffle.enter{value: entranceFee}();
+
+        vm.recordLogs();
+        raffle.performUpkeep("");
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+        bytes32 requestId = entries[1].topics[1];
+        VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(uint256(requestId), address(raffle));
+
+        assertEq(raffle.getRecentWinner(), alice);
+        assertEq(raffle.getPendingPrize(alice), entranceFee);
+
+        // Round 1: Bob enters and wins, does NOT claim
+        vm.warp(block.timestamp + interval + 1);
+        vm.roll(block.number + 1);
+        vm.prank(bob);
+        raffle.enter{value: entranceFee}();
+
+        vm.recordLogs();
+        raffle.performUpkeep("");
+        entries = vm.getRecordedLogs();
+        requestId = entries[1].topics[1];
+        VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(uint256(requestId), address(raffle));
+
+        assertEq(raffle.getRecentWinner(), bob);
+        assertEq(raffle.getPendingPrize(bob), entranceFee);
+        assertEq(raffle.getPendingPrize(alice), entranceFee);
+
+        // Round 2: Charlie enters and wins — prize must be exactly entranceFee, not more
+        vm.warp(block.timestamp + interval + 1);
+        vm.roll(block.number + 1);
+        vm.prank(charlie);
+        raffle.enter{value: entranceFee}();
+
+        vm.recordLogs();
+        raffle.performUpkeep("");
+        entries = vm.getRecordedLogs();
+        requestId = entries[1].topics[1];
+        VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(uint256(requestId), address(raffle));
+
+        assertEq(raffle.getRecentWinner(), charlie);
+        assertEq(raffle.getPendingPrize(charlie), entranceFee);
+        assertEq(raffle.getPendingPrize(alice), entranceFee);
+        assertEq(raffle.getPendingPrize(bob), entranceFee);
+
+        assertEq(address(raffle).balance, entranceFee * 3);
+    }
+
     function testMultipleRoundWinsAccumulatePrize() public timePassed skipFork {
         vm.prank(PLAYER);
         raffle.enter{value: entranceFee}();

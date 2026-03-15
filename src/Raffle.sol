@@ -50,6 +50,8 @@ contract Raffle is VRFConsumerBaseV2Plus {
 
     /// @dev Tracks unclaimed prizes per address (pull pattern)
     mapping(address => uint256) private s_pendingPrizes;
+    /// @dev Running total of all unclaimed prizes, used to derive the current round's prize pool
+    uint256 private s_totalPendingPrizes;
 
     event Entered(address indexed player, uint256 indexed round);
     event WinnerPicked(address indexed winner, uint256 indexed round, uint256 prize);
@@ -156,10 +158,11 @@ contract Raffle is VRFConsumerBaseV2Plus {
         uint256 numPlayers = s_playersCount[round];
         uint256 winnerIndex = randomWords[0] % numPlayers;
         address payable winner = s_players[round][winnerIndex];
-        uint256 prize = address(this).balance - _totalPendingPrizes();
+        uint256 prize = address(this).balance - s_totalPendingPrizes;
 
         s_recentWinner = winner;
         s_pendingPrizes[winner] += prize;
+        s_totalPendingPrizes += prize;
         s_currentRound = round + 1;
         s_raffleState = RaffleState.OPEN;
         s_lastTimestamp = block.timestamp;
@@ -175,6 +178,7 @@ contract Raffle is VRFConsumerBaseV2Plus {
         }
 
         s_pendingPrizes[msg.sender] = 0;
+        s_totalPendingPrizes -= amount;
 
         emit PrizeClaimed(msg.sender, amount);
 
@@ -182,16 +186,6 @@ contract Raffle is VRFConsumerBaseV2Plus {
         if (!success) {
             revert Raffle__TransferFailed();
         }
-    }
-
-    /// @dev Sums all pending (unclaimed) prizes to calculate the current round's prize pool
-    /// This is bounded by the number of distinct unclaimed winners, not the total player count.
-    /// In practice this is a small number (typically 0 or 1 unclaimed winner at any time).
-    /// For production with many rounds, a running total counter would be more gas-efficient.
-    function _totalPendingPrizes() private view returns (uint256 total) {
-        // Only the most recent winner can have unclaimed prizes in normal operation,
-        // since each round produces exactly one winner. We check the recent winner only.
-        total = s_pendingPrizes[s_recentWinner];
     }
 
     /*//////////////////////////////////////////////////////////////
