@@ -152,6 +152,16 @@ Deploying to Sepolia surfaced issues that local testing doesn't catch:
 
 3. **VRF and Automation are separate systems**: VRF subscriptions pay for randomness. Automation upkeeps pay for calling `performUpkeep`. Each has its own LINK balance, and a new upkeep must be registered for every new contract address. **Lesson**: A working local setup doesn't mean the Chainlink infrastructure is configured — both subscriptions and upkeeps must be explicitly set up on-chain.
 
+## Known Tradeoffs
+
+- **Unclaimed prizes reduce the prize pool**: If a winner never claims (e.g., a contract that reverts on ETH receipt), their prize remains in `s_pendingPrizes` and `s_totalPendingPrizes` indefinitely. This locks ETH in the contract and reduces the available prize pool for future rounds. A production system could add a prize expiry mechanism (return unclaimed prizes to the pool after N rounds), at the cost of additional time-based logic and reducing the fully trustless guarantee.
+
+In practice, winners are financially incentivized to claim, so accumulation of unclaimed prizes is unlikely. Hence, I prefer to keep the trustless design, and let players claim their rewards when they see fit.
+
+- **No recovery if VRF fails**: If the contract enters `CALCULATING_WINNER` and the VRF callback never arrives (e.g., unfunded subscription), the contract is permanently stuck with no way to reset (experienced firsthand on Sepolia). Players' entrance fees for that round are locked. An admin rescue function would fix this but require an owner role, breaking the trustless property.
+
+- **Dead storage from old rounds**: Player data from every past round remains in storage indefinitely. This doesn't affect gas costs (mapping lookups are O(1) regardless), but the storage footprint grows linearly with total players across all rounds.
+
 ## Future Improvements
 
 - **Invariant (stateful fuzz) testing**: The core solvency property `address(raffle).balance >= s_totalPendingPrizes` should hold after any sequence of `enter`, `performUpkeep`, `fulfillRandomWords`, and `claimPrize` calls. A stateful fuzz test with a handler contract would prove this under adversarial conditions, providing stronger guarantees than unit tests alone.
