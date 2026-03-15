@@ -6,13 +6,12 @@ import {VRFV2PlusClient} from "@chainlink/contracts/src/v0.8/vrf/dev/libraries/V
 
 /// @title Raffle
 /// @author Ivan Hrekov (1vnhk)
-/// @notice This contract is for creating a sample raffle (lottery)
-/// @dev Implements Chainlink VRFv2.5
+/// @notice A trustless, automated raffle contract powered by Chainlink VRF and Automation
+/// @dev Implements Chainlink VRFv2.5 for randomness and Chainlink Automation for upkeep
 contract Raffle is VRFConsumerBaseV2Plus {
     error Raffle__SendMoreToEnterRaffle();
     error Raffle__FeeIsTooLow();
     error Raffle__IntervalIsTooLow();
-    error Raffle__IntervalHasNotPassed();
     error Raffle__TransferFailed();
     error Raffle__RaffleNotOpen();
     error Raffle__UpkeepNotNeeded(uint256 balance, uint256 numPlayers, uint256 raffleState);
@@ -65,6 +64,8 @@ contract Raffle is VRFConsumerBaseV2Plus {
         s_raffleState = RaffleState.OPEN;
     }
 
+    /// @notice Enter the raffle by sending at least the entrance fee
+    /// @dev Reverts if the raffle is not open or insufficient ETH is sent
     function enter() external payable {
         require(msg.value >= i_entranceFee, Raffle__SendMoreToEnterRaffle());
         require(s_raffleState == RaffleState.OPEN, Raffle__RaffleNotOpen());
@@ -74,17 +75,15 @@ contract Raffle is VRFConsumerBaseV2Plus {
         emit Entered(msg.sender);
     }
 
-    /// When should the winner be picked?
-    /// @dev this is the function that Chainlink nodes will call to see
-    /// if the lottery is ready to have the winner picked.
-    /// The following should be true in order for upkeepNeeded to be true:
-    /// 1. Lottery should be open
-    /// 2. The lottery is open
-    /// 3. The contract has ETH
-    /// 4. Implicitly, the subscription is funded with LINK or ETH
-    /// @param - ignored
-    /// @return upkeepNeeded - true if it's time to pick a winner and restart a lottery
-    /// @return - ignored
+    /// @notice Checks whether the raffle is ready to pick a winner
+    /// @dev Called by Chainlink Automation nodes off-chain to determine if performUpkeep should be called.
+    /// All of the following must be true for upkeepNeeded to return true:
+    /// 1. The raffle is in OPEN state
+    /// 2. The interval has passed since the last winner was picked
+    /// 3. The contract has ETH (i.e. at least one player has entered)
+    /// 4. There is at least one player
+    /// @return upkeepNeeded True if it is time to pick a winner
+    /// @return performData Unused — empty bytes
     function checkUpkeep(
         bytes memory /* checkData */
     )
@@ -102,6 +101,9 @@ contract Raffle is VRFConsumerBaseV2Plus {
         return (timeHasPassed && isOpen && hasBalance && hasPlayers, "");
     }
 
+    /// @notice Triggers winner selection by requesting randomness from Chainlink VRF
+    /// @dev Called by Chainlink Automation when checkUpkeep returns true.
+    /// Reverts with Raffle__UpkeepNotNeeded if conditions are not met.
     function performUpkeep(
         bytes memory /* performData */
     )
@@ -121,7 +123,6 @@ contract Raffle is VRFConsumerBaseV2Plus {
                 requestConfirmations: REQUEST_CONFIRMATIONS,
                 callbackGasLimit: i_callbackGasLimit,
                 numWords: NUM_WORDS,
-                // Set nativePayment to true to pay for VRF requests with Sepolia ETH instead of LINK
                 extraArgs: VRFV2PlusClient._argsToBytes(VRFV2PlusClient.ExtraArgsV1({nativePayment: false}))
             })
         );
@@ -129,27 +130,38 @@ contract Raffle is VRFConsumerBaseV2Plus {
         emit RequestedRaffleWinner(requestId);
     }
 
-    function fulfillRandomWords(uint256 requestId, uint256[] calldata randomWords) internal override {
+    /// @notice Callback function called by the VRF Coordinator with the random words
+    /// @dev Selects a winner, resets the raffle, and transfers the prize.
+    /// Follows the checks-effects-interactions pattern.
+    function fulfillRandomWords(
+        uint256,
+        /* requestId */
+        uint256[] calldata randomWords
+    )
+        internal
+        override
+    {
         uint256 winnerIndex = randomWords[0] % s_players.length;
         address payable recentWinner = s_players[winnerIndex];
+        uint256 prize = address(this).balance;
 
         s_recentWinner = recentWinner;
         s_raffleState = RaffleState.OPEN;
-        s_players = new address payable[](0); // TODO: use delete
+        delete s_players;
         s_lastTimestamp = block.timestamp;
 
-        emit WinnerPicked(s_recentWinner, address(this).balance); // TODO: add tests for this
+        emit WinnerPicked(recentWinner, prize);
 
-        // TODO: move to pull pattern
-        (bool success,) = recentWinner.call{value: address(this).balance}("");
+        (bool success,) = recentWinner.call{value: prize}("");
         if (!success) {
             revert Raffle__TransferFailed();
         }
     }
 
-    /**
-     * Getter functions
-     */
+    /*//////////////////////////////////////////////////////////////
+                            GETTER FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
+
     function getEntranceFee() external view returns (uint256) {
         return i_entranceFee;
     }
@@ -160,6 +172,10 @@ contract Raffle is VRFConsumerBaseV2Plus {
 
     function getPlayer(uint256 index) external view returns (address) {
         return s_players[index];
+    }
+
+    function getPlayersCount() external view returns (uint256) {
+        return s_players.length;
     }
 
     function getLastTimestamp() external view returns (uint256) {

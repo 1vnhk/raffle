@@ -15,8 +15,6 @@ contract RaffleTest is Test, CodeConstants {
     uint256 entranceFee;
     uint256 interval;
     address vrfCoordinator;
-    bytes32 gasLane;
-    uint32 callbackGasLimit;
     uint256 subscriptionId;
 
     address PLAYER = makeAddr("player");
@@ -31,8 +29,6 @@ contract RaffleTest is Test, CodeConstants {
         entranceFee = config.entranceFee;
         interval = config.interval;
         vrfCoordinator = config.vrfCoordinator;
-        gasLane = config.gasLane;
-        callbackGasLimit = config.callbackGasLimit;
         subscriptionId = config.subscriptionId;
 
         vm.deal(PLAYER, STARTING_PLAYER_BALANCE);
@@ -43,12 +39,12 @@ contract RaffleTest is Test, CodeConstants {
     //////////////////////////////////////////////////////////////*/
     function testRaffleRevertsWhenFeeIsZero() public {
         vm.expectRevert(Raffle.Raffle__FeeIsTooLow.selector);
-        new Raffle(0, interval, vrfCoordinator, gasLane, subscriptionId, callbackGasLimit);
+        new Raffle(0, interval, vrfCoordinator, bytes32(0), subscriptionId, 500_000);
     }
 
     function testRaffleRevertsWhenIntervalIsZero() public {
         vm.expectRevert(Raffle.Raffle__IntervalIsTooLow.selector);
-        new Raffle(interval, 0, vrfCoordinator, gasLane, subscriptionId, callbackGasLimit);
+        new Raffle(entranceFee, 0, vrfCoordinator, bytes32(0), subscriptionId, 500_000);
     }
 
     function testRaffleIsInitializedWithCorrectEntranceFee() public view {
@@ -64,7 +60,7 @@ contract RaffleTest is Test, CodeConstants {
     }
 
     function testRaffleIsInitializedInOpenState() public view {
-        assert(raffle.getRaffleState() == Raffle.RaffleState.OPEN);
+        assertEq(uint256(raffle.getRaffleState()), uint256(Raffle.RaffleState.OPEN));
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -81,14 +77,20 @@ contract RaffleTest is Test, CodeConstants {
         _;
     }
 
+    modifier skipFork() {
+        if (block.chainid != LOCAL_CHAIN_ID) {
+            return;
+        }
+        _;
+    }
+
     function testEnterRevertsWhenPlayerPaysLessThanEntranceFee() public player {
         vm.expectRevert(Raffle.Raffle__SendMoreToEnterRaffle.selector);
         raffle.enter{value: entranceFee - 1}();
     }
 
-    function testDontAllowPlayersToEnterWhileRaffleIsCalculating() public timePassed {
+    function testEnterRevertsWhenRaffleIsCalculating() public timePassed {
         raffle.enter{value: entranceFee}();
-
         raffle.performUpkeep("");
 
         vm.expectRevert(Raffle.Raffle__RaffleNotOpen.selector);
@@ -102,7 +104,13 @@ contract RaffleTest is Test, CodeConstants {
         assertEq(raffle.getPlayer(0), PLAYER);
     }
 
-    function testEnterEmitsEvent() public player {
+    function testEnterIncrementsPlayersCount() public player {
+        raffle.enter{value: entranceFee}();
+
+        assertEq(raffle.getPlayersCount(), 1);
+    }
+
+    function testEnterEmitsEnteredEvent() public player {
         vm.expectEmit(true, false, false, false, address(raffle));
         emit Raffle.Entered(PLAYER);
         raffle.enter{value: entranceFee}();
@@ -117,7 +125,7 @@ contract RaffleTest is Test, CodeConstants {
         assertEq(PLAYER.balance, playerStartingBalance - entranceFee);
     }
 
-    function testEnterKeepsSentFeeEvenIfItsMoreThanEntranceFee() public player {
+    function testEnterKeepsExcessFee() public player {
         uint256 raffleStartingBalance = address(raffle).balance;
         uint256 playerStartingBalance = PLAYER.balance;
         uint256 extraFee = 100 gwei;
@@ -130,13 +138,21 @@ contract RaffleTest is Test, CodeConstants {
     /*//////////////////////////////////////////////////////////////
                               CHECK UPKEEP
     //////////////////////////////////////////////////////////////*/
-    function testCheckUpkeepReturnsFalseIfBalanceIsZero() public timePassed {
+    function testCheckUpkeepReturnsFalseIfIntervalHasNotPassed() public player {
+        raffle.enter{value: entranceFee}();
+
         (bool upkeepNeeded,) = raffle.checkUpkeep("");
 
         assertEq(upkeepNeeded, false);
     }
 
-    function testCheckUpkeepReturnsFalseIfRaffleIsNotOpen() public player timePassed {
+    function testCheckUpkeepReturnsFalseIfNoBalance() public timePassed {
+        (bool upkeepNeeded,) = raffle.checkUpkeep("");
+
+        assertEq(upkeepNeeded, false);
+    }
+
+    function testCheckUpkeepReturnsFalseIfRaffleIsCalculating() public player timePassed {
         raffle.enter{value: entranceFee}();
         raffle.performUpkeep("");
 
@@ -145,8 +161,16 @@ contract RaffleTest is Test, CodeConstants {
         assertEq(upkeepNeeded, false);
     }
 
+    function testCheckUpkeepReturnsTrueWhenAllConditionsMet() public player timePassed {
+        raffle.enter{value: entranceFee}();
+
+        (bool upkeepNeeded,) = raffle.checkUpkeep("");
+
+        assertEq(upkeepNeeded, true);
+    }
+
     /*//////////////////////////////////////////////////////////////
-                             PEFRORM UPKEEP
+                             PERFORM UPKEEP
     //////////////////////////////////////////////////////////////*/
     function testPerformUpkeepCanOnlyRunIfCheckUpkeepIsTrue() public player timePassed {
         raffle.enter{value: entranceFee}();
@@ -178,21 +202,13 @@ contract RaffleTest is Test, CodeConstants {
         Vm.Log[] memory entries = vm.getRecordedLogs();
         bytes32 requestId = entries[1].topics[1];
 
-        Raffle.RaffleState state = raffle.getRaffleState();
-        assert(uint256(requestId) > 0);
-        assert(state == Raffle.RaffleState.CALCULATING_WINNER);
+        assertGt(uint256(requestId), 0);
+        assertEq(uint256(raffle.getRaffleState()), uint256(Raffle.RaffleState.CALCULATING_WINNER));
     }
 
     /*//////////////////////////////////////////////////////////////
                           FULFILL RANDOM WORDS
     //////////////////////////////////////////////////////////////*/
-    modifier skipFork() {
-        if (block.chainid != LOCAL_CHAIN_ID) {
-            return;
-        }
-        _;
-    }
-
     function testFulfillRandomWordsCanOnlyBeCalledAfterPerformUpkeep(uint256 randomRequestId)
         public
         player
@@ -205,7 +221,7 @@ contract RaffleTest is Test, CodeConstants {
         VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(randomRequestId, address(raffle));
     }
 
-    function testFulfillRandomWordsPicksAWinnerResetsAndSetsMoney() public player timePassed skipFork {
+    function testFulfillRandomWordsPicksWinnerResetsAndPaysPrize() public player timePassed skipFork {
         raffle.enter{value: entranceFee}();
 
         uint256 additionalEntrants = 3;
@@ -213,28 +229,29 @@ contract RaffleTest is Test, CodeConstants {
         address expectedWinner = address(1);
 
         for (uint256 i = startingIndex; i < startingIndex + additionalEntrants; i++) {
+            // forge-lint: disable-next-line(unsafe-typecast)
             address newPlayer = address(uint160(i));
             hoax(newPlayer, STARTING_PLAYER_BALANCE);
             raffle.enter{value: entranceFee}();
         }
-        uint256 startingTimestamp = raffle.getLastTimestamp();
+
+        uint256 prize = entranceFee * (additionalEntrants + 1);
         uint256 winnerStartingBalance = expectedWinner.balance;
+        uint256 startingTimestamp = raffle.getLastTimestamp();
 
         vm.recordLogs();
         raffle.performUpkeep("");
         Vm.Log[] memory entries = vm.getRecordedLogs();
         bytes32 requestId = entries[1].topics[1];
+
+        vm.expectEmit(true, false, false, true, address(raffle));
+        emit Raffle.WinnerPicked(expectedWinner, prize);
         VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(uint256(requestId), address(raffle));
 
-        address recentWinner = raffle.getRecentWinner();
-        Raffle.RaffleState state = raffle.getRaffleState();
-        uint256 winnerBalance = recentWinner.balance;
-        uint256 endingTimestamp = raffle.getLastTimestamp();
-        uint256 prize = entranceFee * (additionalEntrants + 1);
-
-        assert(recentWinner == expectedWinner);
-        assert(state == Raffle.RaffleState.OPEN);
-        assert(winnerBalance == winnerStartingBalance + prize);
-        assert(endingTimestamp > startingTimestamp);
+        assertEq(raffle.getRecentWinner(), expectedWinner);
+        assertEq(uint256(raffle.getRaffleState()), uint256(Raffle.RaffleState.OPEN));
+        assertEq(raffle.getPlayersCount(), 0);
+        assertEq(raffle.getRecentWinner().balance, winnerStartingBalance + prize);
+        assertGt(raffle.getLastTimestamp(), startingTimestamp);
     }
 }
