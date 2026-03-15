@@ -11,7 +11,7 @@ import {VRFV2PlusClient} from "@chainlink/contracts/src/v0.8/vrf/dev/libraries/V
 /// Uses a round-based architecture to avoid O(n) storage deletion in the VRF callback,
 /// and a pull pattern for prize withdrawal to prevent DoS by reverting winners.
 contract Raffle is VRFConsumerBaseV2Plus {
-    error Raffle__SendMoreToEnterRaffle();
+    error Raffle__IncorrectEntranceFee();
     error Raffle__FeeIsTooLow();
     error Raffle__IntervalIsTooLow();
     error Raffle__RaffleNotOpen();
@@ -79,9 +79,10 @@ contract Raffle is VRFConsumerBaseV2Plus {
         s_raffleState = RaffleState.OPEN;
     }
 
-    /// @notice Enter the raffle by sending at least the entrance fee
+    /// @notice Enter the raffle by sending exactly the entrance fee.
+    /// Duplicate entries are allowed — entering multiple times increases odds proportionally.
     function enter() external payable {
-        require(msg.value >= i_entranceFee, Raffle__SendMoreToEnterRaffle());
+        require(msg.value == i_entranceFee, Raffle__IncorrectEntranceFee());
         require(s_raffleState == RaffleState.OPEN, Raffle__RaffleNotOpen());
 
         uint256 round = s_currentRound;

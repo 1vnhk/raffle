@@ -89,8 +89,13 @@ contract RaffleTest is Test, CodeConstants {
     }
 
     function testEnterRevertsWhenPlayerPaysLessThanEntranceFee() public player {
-        vm.expectRevert(Raffle.Raffle__SendMoreToEnterRaffle.selector);
+        vm.expectRevert(Raffle.Raffle__IncorrectEntranceFee.selector);
         raffle.enter{value: entranceFee - 1}();
+    }
+
+    function testEnterRevertsWhenPlayerPaysMoreThanEntranceFee() public player {
+        vm.expectRevert(Raffle.Raffle__IncorrectEntranceFee.selector);
+        raffle.enter{value: entranceFee + 1}();
     }
 
     function testEnterRevertsWhenRaffleIsCalculating() public timePassed {
@@ -127,16 +132,6 @@ contract RaffleTest is Test, CodeConstants {
 
         assertEq(address(raffle).balance, raffleStartingBalance + entranceFee);
         assertEq(PLAYER.balance, playerStartingBalance - entranceFee);
-    }
-
-    function testEnterKeepsExcessFee() public player {
-        uint256 raffleStartingBalance = address(raffle).balance;
-        uint256 playerStartingBalance = PLAYER.balance;
-        uint256 extraFee = 100 gwei;
-        raffle.enter{value: entranceFee + extraFee}();
-
-        assertEq(address(raffle).balance, raffleStartingBalance + entranceFee + extraFee);
-        assertEq(PLAYER.balance, playerStartingBalance - entranceFee - extraFee);
     }
 
     /*//////////////////////////////////////////////////////////////

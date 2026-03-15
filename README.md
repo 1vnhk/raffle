@@ -6,7 +6,7 @@ Players enter by sending ETH. After a configurable interval, Chainlink Automatio
 
 ## How It Works
 
-1. Players call `enter()` with at least the entrance fee in ETH
+1. Players call `enter()` with exactly the entrance fee in ETH
 2. Chainlink Automation monitors `checkUpkeep()` off-chain
 3. Once the interval passes and conditions are met, Automation calls `performUpkeep()`
 4. A VRF randomness request is sent to Chainlink
@@ -45,6 +45,12 @@ This prevents two failure modes:
 - **Callback gas exhaustion**: The ETH transfer in a push pattern adds unpredictable gas cost (the receiver can run arbitrary code in `receive()`). Moving it out of the callback keeps `fulfillRandomWords` gas usage constant.
 
 The tradeoff is UX: winners must send a second transaction to claim. In practice, this is standard in DeFi (vesting, airdrops, yield protocols all use pull patterns).
+
+### Exact entrance fee
+
+`enter()` requires `msg.value == i_entranceFee` (strict equality, not `>=`). This prevents users from accidentally overpaying and losing funds to the prize pool. Every entry contributes exactly the same amount, making the prize calculation deterministic: `prize = entranceFee * playersCount` (assuming no forced ETH via selfdestruct). 
+
+**Duplicate entries from the same address are allowed** — each entry is an independent ticket that increases odds proportionally.
 
 ### Running prize pool counter
 
