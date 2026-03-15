@@ -142,6 +142,16 @@ make deploy
 make deploy ARGS="--network sepolia"
 ```
 
+## Deployment Lessons
+
+Deploying to Sepolia surfaced issues that local testing doesn't catch:
+
+1. **Unfunded VRF subscription**: The first deployment got stuck in `CALCULATING_WINNER` permanently. The VRF request was sent but the subscription had no LINK to pay for the callback. With no admin function to reset the state, the contract was bricked. **Lesson**: Fund the VRF subscription *before* any interaction, and verify it on [vrf.chain.link](https://vrf.chain.link).
+
+2. **`callbackGasLimit` determines LINK cost**: The initial config used `2,500,000` gas (from the course default). VRF reserves LINK proportional to this limit upfront — at 2.5M, each request cost ~360 LINK. The actual `fulfillRandomWords` callback uses ~80,000 gas. Reducing to `100,000` brought the cost to ~0.058 LINK per request. **Lesson**: Size `callbackGasLimit` to actual usage + headroom, not an arbitrary large number.
+
+3. **VRF and Automation are separate systems**: VRF subscriptions pay for randomness. Automation upkeeps pay for calling `performUpkeep`. Each has its own LINK balance, and a new upkeep must be registered for every new contract address. **Lesson**: A working local setup doesn't mean the Chainlink infrastructure is configured — both subscriptions and upkeeps must be explicitly set up on-chain.
+
 ## Future Improvements
 
 - **Invariant (stateful fuzz) testing**: The core solvency property `address(raffle).balance >= s_totalPendingPrizes` should hold after any sequence of `enter`, `performUpkeep`, `fulfillRandomWords`, and `claimPrize` calls. A stateful fuzz test with a handler contract would prove this under adversarial conditions, providing stronger guarantees than unit tests alone.
