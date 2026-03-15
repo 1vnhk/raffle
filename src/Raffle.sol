@@ -236,4 +236,8 @@ contract Raffle is VRFConsumerBaseV2Plus {
     function getPendingPrize(address player) external view returns (uint256) {
         return s_pendingPrizes[player];
     }
+
+    function getTotalPendingPrizes() external view returns (uint256) {
+        return s_totalPendingPrizes;
+    }
 }

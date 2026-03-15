@@ -421,6 +421,38 @@ contract RaffleTest is Test, CodeConstants {
         assertEq(address(raffle).balance, entranceFee * 3);
     }
 
+    function testTotalPendingPrizesStartsAtZero() public view {
+        assertEq(raffle.getTotalPendingPrizes(), 0);
+    }
+
+    function testTotalPendingPrizesIncreasesOnWin() public player timePassed skipFork {
+        raffle.enter{value: entranceFee}();
+
+        vm.recordLogs();
+        raffle.performUpkeep("");
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+        bytes32 requestId = entries[1].topics[1];
+        VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(uint256(requestId), address(raffle));
+
+        assertEq(raffle.getTotalPendingPrizes(), entranceFee);
+    }
+
+    function testTotalPendingPrizesDecreasesOnClaim() public player timePassed skipFork {
+        raffle.enter{value: entranceFee}();
+
+        vm.recordLogs();
+        raffle.performUpkeep("");
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+        bytes32 requestId = entries[1].topics[1];
+        VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(uint256(requestId), address(raffle));
+
+        address winner = raffle.getRecentWinner();
+        vm.prank(winner);
+        raffle.claimPrize();
+
+        assertEq(raffle.getTotalPendingPrizes(), 0);
+    }
+
     function testMultipleRoundWinsAccumulatePrize() public timePassed skipFork {
         vm.prank(PLAYER);
         raffle.enter{value: entranceFee}();
