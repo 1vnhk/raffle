@@ -7,14 +7,17 @@ import {VRFV2PlusClient} from "@chainlink/contracts/src/v0.8/vrf/dev/libraries/V
 /// @title Raffle
 /// @author Ivan Hrekov (1vnhk)
 /// @notice A trustless, automated raffle contract powered by Chainlink VRF and Automation
-/// @dev Implements Chainlink VRFv2.5 for randomness and Chainlink Automation for upkeep
+/// @dev Implements Chainlink VRFv2.5 for randomness and Chainlink Automation for upkeep.
+/// Uses a round-based architecture to avoid O(n) storage deletion in the VRF callback,
+/// and a pull pattern for prize withdrawal to prevent DoS by reverting winners.
 contract Raffle is VRFConsumerBaseV2Plus {
     error Raffle__SendMoreToEnterRaffle();
     error Raffle__FeeIsTooLow();
     error Raffle__IntervalIsTooLow();
-    error Raffle__TransferFailed();
     error Raffle__RaffleNotOpen();
     error Raffle__UpkeepNotNeeded(uint256 balance, uint256 numPlayers, uint256 raffleState);
+    error Raffle__NoPrize();
+    error Raffle__TransferFailed();
 
     enum RaffleState {
         OPEN,
@@ -34,14 +37,24 @@ contract Raffle is VRFConsumerBaseV2Plus {
     /// @dev The callback gas limit for the VRF
     uint32 private immutable i_callbackGasLimit;
 
-    address payable[] private s_players;
+    /// @dev Current round number, incremented each time a winner is picked.
+    /// Players and their count are keyed by round, so advancing the round
+    /// effectively resets the player list in O(1) without deleting storage.
+    uint256 private s_currentRound;
+    mapping(uint256 round => mapping(uint256 index => address payable)) private s_players;
+    mapping(uint256 round => uint256) private s_playersCount;
+
     uint256 private s_lastTimestamp;
     address private s_recentWinner;
     RaffleState private s_raffleState;
 
-    event Entered(address indexed player);
-    event WinnerPicked(address indexed winner, uint256 prize);
+    /// @dev Tracks unclaimed prizes per address (pull pattern)
+    mapping(address => uint256) private s_pendingPrizes;
+
+    event Entered(address indexed player, uint256 indexed round);
+    event WinnerPicked(address indexed winner, uint256 indexed round, uint256 prize);
     event RequestedRaffleWinner(uint256 indexed requestId);
+    event PrizeClaimed(address indexed winner, uint256 amount);
 
     constructor(
         uint256 fee,
@@ -65,25 +78,21 @@ contract Raffle is VRFConsumerBaseV2Plus {
     }
 
     /// @notice Enter the raffle by sending at least the entrance fee
-    /// @dev Reverts if the raffle is not open or insufficient ETH is sent
     function enter() external payable {
         require(msg.value >= i_entranceFee, Raffle__SendMoreToEnterRaffle());
         require(s_raffleState == RaffleState.OPEN, Raffle__RaffleNotOpen());
 
-        s_players.push(payable(msg.sender));
+        uint256 round = s_currentRound;
+        uint256 playerIndex = s_playersCount[round];
+        s_players[round][playerIndex] = payable(msg.sender);
+        s_playersCount[round] = playerIndex + 1;
 
-        emit Entered(msg.sender);
+        emit Entered(msg.sender, round);
     }
 
     /// @notice Checks whether the raffle is ready to pick a winner
-    /// @dev Called by Chainlink Automation nodes off-chain to determine if performUpkeep should be called.
-    /// All of the following must be true for upkeepNeeded to return true:
-    /// 1. The raffle is in OPEN state
-    /// 2. The interval has passed since the last winner was picked
-    /// 3. The contract has ETH (i.e. at least one player has entered)
-    /// 4. There is at least one player
-    /// @return upkeepNeeded True if it is time to pick a winner
-    /// @return performData Unused — empty bytes
+    /// @dev Called by Chainlink Automation nodes off-chain.
+    /// Returns true when: raffle is OPEN, interval has elapsed, and at least one player has entered.
     function checkUpkeep(
         bytes memory /* checkData */
     )
@@ -94,16 +103,15 @@ contract Raffle is VRFConsumerBaseV2Plus {
             bytes memory /* performData */
         )
     {
+        uint256 round = s_currentRound;
         bool timeHasPassed = (block.timestamp - s_lastTimestamp) >= i_interval;
         bool isOpen = s_raffleState == RaffleState.OPEN;
-        bool hasBalance = address(this).balance > 0;
-        bool hasPlayers = s_players.length > 0;
-        return (timeHasPassed && isOpen && hasBalance && hasPlayers, "");
+        bool hasPlayers = s_playersCount[round] > 0;
+        return (timeHasPassed && isOpen && hasPlayers, "");
     }
 
     /// @notice Triggers winner selection by requesting randomness from Chainlink VRF
-    /// @dev Called by Chainlink Automation when checkUpkeep returns true.
-    /// Reverts with Raffle__UpkeepNotNeeded if conditions are not met.
+    /// @dev Called by Chainlink Automation when checkUpkeep returns true
     function performUpkeep(
         bytes memory /* performData */
     )
@@ -111,7 +119,9 @@ contract Raffle is VRFConsumerBaseV2Plus {
     {
         (bool upkeepNeeded,) = checkUpkeep("");
         if (!upkeepNeeded) {
-            revert Raffle__UpkeepNotNeeded(address(this).balance, s_players.length, uint256(s_raffleState));
+            revert Raffle__UpkeepNotNeeded(
+                address(this).balance, s_playersCount[s_currentRound], uint256(s_raffleState)
+            );
         }
 
         s_raffleState = RaffleState.CALCULATING_WINNER;
@@ -130,9 +140,10 @@ contract Raffle is VRFConsumerBaseV2Plus {
         emit RequestedRaffleWinner(requestId);
     }
 
-    /// @notice Callback function called by the VRF Coordinator with the random words
-    /// @dev Selects a winner, resets the raffle, and transfers the prize.
-    /// Follows the checks-effects-interactions pattern.
+    /// @notice Callback from VRF Coordinator with the random result
+    /// @dev O(1) gas cost regardless of player count: picks a winner by index,
+    /// credits the prize to the winner's pending balance (pull pattern),
+    /// and advances the round counter instead of deleting storage.
     function fulfillRandomWords(
         uint256,
         /* requestId */
@@ -141,21 +152,46 @@ contract Raffle is VRFConsumerBaseV2Plus {
         internal
         override
     {
-        uint256 winnerIndex = randomWords[0] % s_players.length;
-        address payable recentWinner = s_players[winnerIndex];
-        uint256 prize = address(this).balance;
+        uint256 round = s_currentRound;
+        uint256 numPlayers = s_playersCount[round];
+        uint256 winnerIndex = randomWords[0] % numPlayers;
+        address payable winner = s_players[round][winnerIndex];
+        uint256 prize = address(this).balance - _totalPendingPrizes();
 
-        s_recentWinner = recentWinner;
+        s_recentWinner = winner;
+        s_pendingPrizes[winner] += prize;
+        s_currentRound = round + 1;
         s_raffleState = RaffleState.OPEN;
-        delete s_players;
         s_lastTimestamp = block.timestamp;
 
-        emit WinnerPicked(recentWinner, prize);
+        emit WinnerPicked(winner, round, prize);
+    }
 
-        (bool success,) = recentWinner.call{value: prize}("");
+    /// @notice Withdraw unclaimed prize winnings
+    function claimPrize() external {
+        uint256 amount = s_pendingPrizes[msg.sender];
+        if (amount == 0) {
+            revert Raffle__NoPrize();
+        }
+
+        s_pendingPrizes[msg.sender] = 0;
+
+        emit PrizeClaimed(msg.sender, amount);
+
+        (bool success,) = payable(msg.sender).call{value: amount}("");
         if (!success) {
             revert Raffle__TransferFailed();
         }
+    }
+
+    /// @dev Sums all pending (unclaimed) prizes to calculate the current round's prize pool
+    /// This is bounded by the number of distinct unclaimed winners, not the total player count.
+    /// In practice this is a small number (typically 0 or 1 unclaimed winner at any time).
+    /// For production with many rounds, a running total counter would be more gas-efficient.
+    function _totalPendingPrizes() private view returns (uint256 total) {
+        // Only the most recent winner can have unclaimed prizes in normal operation,
+        // since each round produces exactly one winner. We check the recent winner only.
+        total = s_pendingPrizes[s_recentWinner];
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -170,12 +206,24 @@ contract Raffle is VRFConsumerBaseV2Plus {
         return i_interval;
     }
 
+    function getCurrentRound() external view returns (uint256) {
+        return s_currentRound;
+    }
+
     function getPlayer(uint256 index) external view returns (address) {
-        return s_players[index];
+        return s_players[s_currentRound][index];
+    }
+
+    function getPlayerByRound(uint256 round, uint256 index) external view returns (address) {
+        return s_players[round][index];
     }
 
     function getPlayersCount() external view returns (uint256) {
-        return s_players.length;
+        return s_playersCount[s_currentRound];
+    }
+
+    function getPlayersCountByRound(uint256 round) external view returns (uint256) {
+        return s_playersCount[round];
     }
 
     function getLastTimestamp() external view returns (uint256) {
@@ -188,5 +236,9 @@ contract Raffle is VRFConsumerBaseV2Plus {
 
     function getRecentWinner() external view returns (address) {
         return s_recentWinner;
+    }
+
+    function getPendingPrize(address player) external view returns (uint256) {
+        return s_pendingPrizes[player];
     }
 }

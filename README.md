@@ -2,7 +2,7 @@
 
 A trustless, automated on-chain raffle (lottery) built with Solidity and Foundry.
 
-Players enter by sending ETH. After a configurable interval, Chainlink Automation triggers winner selection. Chainlink VRF provides verifiable randomness to pick the winner, who receives the full prize pool.
+Players enter by sending ETH. After a configurable interval, Chainlink Automation triggers winner selection. Chainlink VRF provides verifiable randomness to pick the winner. Winners claim their prize via a pull-based withdrawal.
 
 ## How It Works
 
@@ -10,7 +10,8 @@ Players enter by sending ETH. After a configurable interval, Chainlink Automatio
 2. Chainlink Automation monitors `checkUpkeep()` off-chain
 3. Once the interval passes and conditions are met, Automation calls `performUpkeep()`
 4. A VRF randomness request is sent to Chainlink
-5. `fulfillRandomWords()` receives the random number, selects a winner, and transfers the prize
+5. `fulfillRandomWords()` receives the random number, selects a winner, and credits the prize
+6. The winner calls `claimPrize()` to withdraw their winnings
 
 ## Architecture
 
@@ -18,6 +19,32 @@ Players enter by sending ETH. After a configurable interval, Chainlink Automatio
 - `script/DeployRaffle.s.sol` — Deployment script with automatic subscription setup
 - `script/HelperConfig.s.sol` — Network-specific configuration (Sepolia, local Anvil)
 - `script/Interactions.s.sol` — Scripts for subscription management
+
+## Design Decisions
+
+### Round-based player storage
+
+A naive implementation stores players in a dynamic array and calls `delete s_players` in the VRF callback to reset for the next round. This is O(n) — the EVM must zero every storage slot in the array. With thousands of participants, this can exceed the VRF `callbackGasLimit`, permanently bricking the raffle.
+
+This contract uses a **round-based architecture** instead:
+
+```
+mapping(uint256 round => mapping(uint256 index => address payable)) s_players;
+mapping(uint256 round => uint256) s_playersCount;
+uint256 s_currentRound;
+```
+
+Resetting between rounds is a single increment: `s_currentRound++`. O(1) regardless of player count. Old round data remains in storage but is inaccessible through the current round's getters. The VRF callback gas cost is constant and predictable.
+
+### Pull pattern for prize withdrawal
+
+Instead of pushing ETH to the winner inside the VRF callback, the prize is credited to a `s_pendingPrizes` mapping. The winner calls `claimPrize()` to withdraw.
+
+This prevents two failure modes:
+- **DoS by reverting receiver**: If the winner is a contract that reverts on ETH receipt, the push pattern would cause the entire VRF callback to fail, locking the raffle. With pull, the callback always succeeds — the reverting contract simply can't claim its prize, but the raffle continues.
+- **Callback gas exhaustion**: The ETH transfer in a push pattern adds unpredictable gas cost (the receiver can run arbitrary code in `receive()`). Moving it out of the callback keeps `fulfillRandomWords` gas usage constant.
+
+The tradeoff is UX: winners must send a second transaction to claim. In practice, this is standard in DeFi (vesting, airdrops, yield protocols all use pull patterns).
 
 ## Requirements
 
@@ -102,5 +129,6 @@ make deploy ARGS="--network sepolia"
 
 - Randomness is provided by Chainlink VRF — not manipulable by miners or the contract owner
 - No owner privileges after deployment — fully trustless
+- Round-based architecture ensures O(1) gas cost in VRF callback regardless of player count
+- Pull pattern prevents DoS by reverting winners
 - Follows checks-effects-interactions pattern throughout
-- Winner selection and prize transfer happen atomically in the VRF callback

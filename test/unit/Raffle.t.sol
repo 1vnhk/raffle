@@ -63,6 +63,10 @@ contract RaffleTest is Test, CodeConstants {
         assertEq(uint256(raffle.getRaffleState()), uint256(Raffle.RaffleState.OPEN));
     }
 
+    function testRaffleStartsAtRoundZero() public view {
+        assertEq(raffle.getCurrentRound(), 0);
+    }
+
     /*//////////////////////////////////////////////////////////////
                              ENTER RAFFLE
     //////////////////////////////////////////////////////////////*/
@@ -111,8 +115,8 @@ contract RaffleTest is Test, CodeConstants {
     }
 
     function testEnterEmitsEnteredEvent() public player {
-        vm.expectEmit(true, false, false, false, address(raffle));
-        emit Raffle.Entered(PLAYER);
+        vm.expectEmit(true, true, false, false, address(raffle));
+        emit Raffle.Entered(PLAYER, 0);
         raffle.enter{value: entranceFee}();
     }
 
@@ -146,7 +150,7 @@ contract RaffleTest is Test, CodeConstants {
         assertEq(upkeepNeeded, false);
     }
 
-    function testCheckUpkeepReturnsFalseIfNoBalance() public timePassed {
+    function testCheckUpkeepReturnsFalseIfNoPlayers() public timePassed {
         (bool upkeepNeeded,) = raffle.checkUpkeep("");
 
         assertEq(upkeepNeeded, false);
@@ -221,7 +225,7 @@ contract RaffleTest is Test, CodeConstants {
         VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(randomRequestId, address(raffle));
     }
 
-    function testFulfillRandomWordsPicksWinnerResetsAndPaysPrize() public player timePassed skipFork {
+    function testFulfillRandomWordsPicksWinnerAndCreditsPrize() public player timePassed skipFork {
         raffle.enter{value: entranceFee}();
 
         uint256 additionalEntrants = 3;
@@ -236,7 +240,6 @@ contract RaffleTest is Test, CodeConstants {
         }
 
         uint256 prize = entranceFee * (additionalEntrants + 1);
-        uint256 winnerStartingBalance = expectedWinner.balance;
         uint256 startingTimestamp = raffle.getLastTimestamp();
 
         vm.recordLogs();
@@ -244,14 +247,154 @@ contract RaffleTest is Test, CodeConstants {
         Vm.Log[] memory entries = vm.getRecordedLogs();
         bytes32 requestId = entries[1].topics[1];
 
-        vm.expectEmit(true, false, false, true, address(raffle));
-        emit Raffle.WinnerPicked(expectedWinner, prize);
+        vm.expectEmit(true, true, false, true, address(raffle));
+        emit Raffle.WinnerPicked(expectedWinner, 0, prize);
         VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(uint256(requestId), address(raffle));
 
         assertEq(raffle.getRecentWinner(), expectedWinner);
         assertEq(uint256(raffle.getRaffleState()), uint256(Raffle.RaffleState.OPEN));
-        assertEq(raffle.getPlayersCount(), 0);
-        assertEq(raffle.getRecentWinner().balance, winnerStartingBalance + prize);
         assertGt(raffle.getLastTimestamp(), startingTimestamp);
+        assertEq(raffle.getPendingPrize(expectedWinner), prize);
+    }
+
+    function testFulfillRandomWordsAdvancesRound() public player timePassed skipFork {
+        raffle.enter{value: entranceFee}();
+
+        assertEq(raffle.getCurrentRound(), 0);
+
+        vm.recordLogs();
+        raffle.performUpkeep("");
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+        bytes32 requestId = entries[1].topics[1];
+        VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(uint256(requestId), address(raffle));
+
+        assertEq(raffle.getCurrentRound(), 1);
+        assertEq(raffle.getPlayersCount(), 0);
+    }
+
+    function testNewRoundPlayersAreIsolatedFromPreviousRound() public timePassed skipFork {
+        address player1 = makeAddr("player1");
+        vm.deal(player1, STARTING_PLAYER_BALANCE);
+        vm.prank(player1);
+        raffle.enter{value: entranceFee}();
+
+        assertEq(raffle.getPlayersCountByRound(0), 1);
+
+        vm.recordLogs();
+        raffle.performUpkeep("");
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+        bytes32 requestId = entries[1].topics[1];
+        VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(uint256(requestId), address(raffle));
+
+        assertEq(raffle.getCurrentRound(), 1);
+        assertEq(raffle.getPlayersCount(), 0);
+        assertEq(raffle.getPlayersCountByRound(0), 1);
+
+        address player2 = makeAddr("player2");
+        vm.deal(player2, STARTING_PLAYER_BALANCE);
+        vm.warp(block.timestamp + 1);
+        vm.prank(player2);
+        raffle.enter{value: entranceFee}();
+
+        assertEq(raffle.getPlayersCount(), 1);
+        assertEq(raffle.getPlayer(0), player2);
+        assertEq(raffle.getPlayerByRound(0, 0), player1);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                              CLAIM PRIZE
+    //////////////////////////////////////////////////////////////*/
+    function testClaimPrizeRevertsIfNoPrize() public {
+        vm.prank(PLAYER);
+        vm.expectRevert(Raffle.Raffle__NoPrize.selector);
+        raffle.claimPrize();
+    }
+
+    function testClaimPrizeTransfersETHToWinner() public player timePassed skipFork {
+        raffle.enter{value: entranceFee}();
+
+        vm.recordLogs();
+        raffle.performUpkeep("");
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+        bytes32 requestId = entries[1].topics[1];
+        VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(uint256(requestId), address(raffle));
+
+        address winner = raffle.getRecentWinner();
+        uint256 prize = raffle.getPendingPrize(winner);
+        uint256 winnerBalanceBefore = winner.balance;
+
+        assertGt(prize, 0);
+
+        vm.prank(winner);
+        raffle.claimPrize();
+
+        assertEq(winner.balance, winnerBalanceBefore + prize);
+        assertEq(raffle.getPendingPrize(winner), 0);
+    }
+
+    function testClaimPrizeEmitsEvent() public player timePassed skipFork {
+        raffle.enter{value: entranceFee}();
+
+        vm.recordLogs();
+        raffle.performUpkeep("");
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+        bytes32 requestId = entries[1].topics[1];
+        VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(uint256(requestId), address(raffle));
+
+        address winner = raffle.getRecentWinner();
+        uint256 prize = raffle.getPendingPrize(winner);
+
+        vm.expectEmit(true, false, false, true, address(raffle));
+        emit Raffle.PrizeClaimed(winner, prize);
+        vm.prank(winner);
+        raffle.claimPrize();
+    }
+
+    function testClaimPrizeCannotBeCalledTwice() public player timePassed skipFork {
+        raffle.enter{value: entranceFee}();
+
+        vm.recordLogs();
+        raffle.performUpkeep("");
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+        bytes32 requestId = entries[1].topics[1];
+        VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(uint256(requestId), address(raffle));
+
+        address winner = raffle.getRecentWinner();
+
+        vm.startPrank(winner);
+        raffle.claimPrize();
+
+        vm.expectRevert(Raffle.Raffle__NoPrize.selector);
+        raffle.claimPrize();
+        vm.stopPrank();
+    }
+
+    function testMultipleRoundWinsAccumulatePrize() public timePassed skipFork {
+        vm.prank(PLAYER);
+        raffle.enter{value: entranceFee}();
+
+        vm.recordLogs();
+        raffle.performUpkeep("");
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+        bytes32 requestId = entries[1].topics[1];
+        VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(uint256(requestId), address(raffle));
+
+        address winner = raffle.getRecentWinner();
+        uint256 firstPrize = raffle.getPendingPrize(winner);
+
+        vm.warp(block.timestamp + interval + 1);
+        vm.roll(block.number + 1);
+
+        vm.deal(winner, STARTING_PLAYER_BALANCE);
+        vm.prank(winner);
+        raffle.enter{value: entranceFee}();
+
+        vm.recordLogs();
+        raffle.performUpkeep("");
+        entries = vm.getRecordedLogs();
+        requestId = entries[1].topics[1];
+        VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(uint256(requestId), address(raffle));
+
+        assertEq(raffle.getPendingPrize(winner), firstPrize + entranceFee);
     }
 }
