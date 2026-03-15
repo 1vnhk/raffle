@@ -137,6 +137,10 @@ make deploy ARGS="--network sepolia"
 | Entrance Fee    | 0.01 ETH                                     |
 | Interval        | 30 seconds                                   |
 
+## Future Improvements
+
+- **Invariant (stateful fuzz) testing**: The core solvency property `address(raffle).balance >= s_totalPendingPrizes` should hold after any sequence of `enter`, `performUpkeep`, `fulfillRandomWords`, and `claimPrize` calls. A stateful fuzz test with a handler contract would prove this under adversarial conditions, providing stronger guarantees than unit tests alone.
+
 ## Security Considerations
 
 - Randomness is provided by Chainlink VRF — not manipulable by miners or the contract owner
